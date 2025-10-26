@@ -190,5 +190,5 @@ Open a PR with a clear description and screenshots
 <h2>📜 Citation</h2>
 If you use this project, please cite:
 <pre> Gunathilaka P.A.S.R., Himsara H.V.D., Navodya B.G.S., Ranaweera R.A.D.S. (2025). NeuroGraphAI: A Multimodal AI System for Epilepsy Diagnosis & Treatment Response. Department of Computer Science, SLIIT. </pre>
-<div align="center"> <sub>© 2025 NeuroGraphAI — MIT License</sub><br> <sub>“Revolutionizing epilepsy care — one neural connection at a time.” ⚡</sub> </div> ```
+<div align="center"> <sub>© 2025 NeuroGraphAI — MIT License</sub><br> <sub>“Revolutionizing epilepsy care — one neural connection at a time.” ⚡</sub> </div> 
 
