@@ -6,6 +6,10 @@ def render():
     mode_param = st.query_params.get("mode", ["upload"])  # may be list
     mode = mode_param[0] if isinstance(mode_param, list) else mode_param
 
+    # Ensure a controllable key to reset the uploader between runs
+    if "uploader_version" not in st.session_state:
+        st.session_state["uploader_version"] = 0
+
     # Scoped CSS for this page
     css = """
     <style>
@@ -122,7 +126,7 @@ def render():
         # Right: Static labeled SOZ image
         st.markdown('<div class="card img-card">', unsafe_allow_html=True)
         st.image(
-            "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/labeled-soz.jpg",
+            "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/soz-labeled.png",
             caption="Static placeholder: Labeled SOZ regions",
             width=520,
         )
@@ -141,7 +145,9 @@ def render():
                         st.experimental_set_query_params(page="soz", mode="upload")
                     except Exception:
                         pass
+                # Clear previous upload and force a fresh uploader widget
                 st.session_state.pop("uploaded_file_name", None)
+                st.session_state["uploader_version"] += 1
                 st.rerun()
 
         st.markdown('</div></div>', unsafe_allow_html=True)  # end .soz-wrapper + .container
@@ -163,12 +169,15 @@ def render():
             st.markdown('<div class="info-card"><div class="info-title">Expected EDF Format</div><ul class="info-list">\n<li>Standard European Data Format</li>\n<li>EEG channel recordings</li>\n<li>Typically 10–20 system electrode placement</li>\n<li>Minimum duration: 5 minutes recommended</li>\n</ul></div>', unsafe_allow_html=True)
 
         with up_col:
+            # Use a versioned key so the widget resets when user chooses to upload another
+            uploader_key = f"eeg_uploader_{st.session_state['uploader_version']}"
             uploaded = st.file_uploader(
                 "",
                 type=["edf", "csv"],
                 label_visibility="hidden",
                 accept_multiple_files=False,
                 help="",
+                key=uploader_key,
             )
 
         if uploaded is not None:
