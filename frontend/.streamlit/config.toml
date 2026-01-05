@@ -1,8 +1,9 @@
 [server]
-port = 8501
+port = 3000
 headless = true
 enableCORS = false
-enableXsrfProtection = true
+enableXsrfProtection = false
+maxUploadSize = 50
 
 [theme]
 primaryColor = "#4A7DFF"
