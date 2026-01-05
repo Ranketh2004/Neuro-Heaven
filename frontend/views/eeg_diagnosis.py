@@ -2,6 +2,64 @@ import streamlit as st
 import requests
 from pathlib import Path
 import time
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+
+def display_binary_dashboard(predictions, window_size=5):
+    """
+    predictions: List of 0s and 1s (e.g., [0, 0, 1, 1, 0...])
+    """
+    st.subheader("Patient Diagnostic Summary")
+    
+    # 1. Calculate Metrics
+    total_epochs = len(predictions)
+    seizure_epochs = sum(predictions)
+    seizure_seconds = seizure_epochs * window_size
+    seizure_load = (seizure_epochs / total_epochs) * 100
+    
+    # Patient-Level Verdict
+    is_epileptic = seizure_epochs >= 2 # Clinical rule: at least 2 detected epochs
+    
+    # 2. Display KPI Cards
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        color = "normal" if not is_epileptic else "inverse"
+        st.metric("Patient Status", "SEIZURE" if is_epileptic else "NORMAL", 
+                  delta="Alert" if is_epileptic else "Clear", delta_color=color)
+    with col2:
+        st.metric("Total Seizure Time", f"{seizure_seconds}s")
+    with col3:
+        st.metric("Seizure Load", f"{seizure_load:.1f}%", help="Percentage of recording flagged as seizure")
+
+    # 3. Interactive Binary Timeline (Status Bar)
+    st.subheader("Temporal Detection Map")
+    
+    time_axis = np.arange(len(predictions)) * window_size
+    
+    fig = go.Figure()
+
+    # Add the 'Step' chart to show the binary state
+    fig.add_trace(go.Scatter(
+        x=time_axis, y=predictions,
+        mode='lines',
+        line=dict(color='red', width=2, shape='hv'), # 'hv' creates the stair-step look
+        fill='tozeroy', # Fills the area under the '1's
+        name='AI Detection'
+    ))
+
+    # Add Background Shading for clarity
+    fig.add_hrect(y0=0, y1=1, fillcolor="gray", opacity=0.05, layer="below")
+    
+    fig.update_layout(
+        xaxis_title="Time (Seconds)",
+        yaxis=dict(tickvals=[0, 1], ticktext=["Normal", "SEIZURE"], range=[-0.2, 1.2]),
+        height=300,
+        template="plotly_white",
+        margin=dict(l=20, r=20, t=20, b=20)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 def render():
     API_URL = "http://localhost:8000"
@@ -26,8 +84,8 @@ def render():
         </style>
     """, unsafe_allow_html=True)
 
-    st.title("Epilepsy Diagnosis")
-    st.markdown("Upload an EEG file to diagnose epilepsy.")
+    # st.title("Epilepsy Diagnosis")
+    # st.markdown("Upload an EEG file to diagnose epilepsy.")
     
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -62,7 +120,36 @@ def render():
                 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                if st.button("Analyze EEG", type="primary", use_container_width=True):
+                # Add Test Visualization Button
+                col_analyze, col_test = st.columns(2)
+                
+                with col_analyze:
+                    analyze_button = st.button("Analyze EEG", type="primary", use_container_width=True)
+                
+                with col_test:
+                    test_button = st.button("Test Visualization", use_container_width=True)
+
+                # Test Visualization without API call
+                if test_button:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.subheader("Test Diagnosis Results")
+                    
+                    st.markdown("""
+                        <div style="background-color: #FEE2E2; border-left: 4px solid #DC2626; 
+                                    padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                            <h4 style="color: #DC2626; margin: 0 0 0.5rem 0;">Epilepsy Detected (Test)</h4>
+                            <p style="margin: 0; color: #991B1B;">This is a test visualization with dummy data.</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.info("This is test data - no actual analysis performed")
+                    
+                    # Display dashboard with test data
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    test_preds = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    display_binary_dashboard(test_preds, window_size=5)
+
+                if analyze_button:
                     with st.spinner("Analyzing EEG data..."):
                         try:
                             files = {
@@ -77,15 +164,21 @@ def render():
                             )
                             processing_time = time.time() - start_time
 
+                            # response = {
+                            #     'status_code': 200,
+                            #     'json': lambda: {
+                            #         'prediction': 1,
+                            #         'predictions': [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0]
+                            #     }
+                            # }
+
                             if response.status_code == 200:
                                 result = response.json()
                                 
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 st.subheader("Diagnosis Results")
 
-                                #prediction = result.get('prediction')
-                                prediction = 1
-                                
+                                prediction = result.get('prediction')
                                 if prediction == 1:
                                     st.markdown("""
                                         <div style="background-color: #FEE2E2; border-left: 4px solid #DC2626; 
@@ -103,7 +196,19 @@ def render():
                                         </div>
                                     """, unsafe_allow_html=True)
 
+
                                 st.info(f"Processing time: {processing_time:.2f} seconds")
+
+                                # Add Binary Dashboard if predictions are available
+                                if 'predictions' in result:
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    predictions = result['predictions']  # Expected: list of 0s and 1s
+                                    display_binary_dashboard(predictions, window_size=5)
+                                else:
+                                    # Example usage with dummy data (remove when API provides real predictions)
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    preds = [0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+                                    display_binary_dashboard(preds)
 
                             elif response.status_code == 413:
                                 st.error("File too large for server processing.")
