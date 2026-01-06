@@ -91,10 +91,12 @@ def render():
             backend_channels = data.get("top_channels", [])
             backend_img_b64 = data.get("topomap_png_base64", None)
 
-        # Convert to your UI expected format
+        # Convert to your UI expected format (backend returns "channel" and "soz_probability")
         channels = []
         for row in backend_channels:
-            channels.append({"name": row.get("name", "UNK"), "p": float(row.get("p", 0.0))})
+            ch_name = row.get("channel", row.get("name", "UNK"))
+            ch_prob = float(row.get("soz_probability", row.get("p", 0.0)))
+            channels.append({"name": ch_name, "p": ch_prob})
 
         # If backend failed or empty, keep your old placeholders (so UI never breaks)
         if not channels:
