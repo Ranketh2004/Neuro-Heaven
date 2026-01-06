@@ -1,0 +1,244 @@
+import streamlit as st
+import requests
+from pathlib import Path
+import time
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+
+def display_binary_dashboard(predictions, window_size=5):
+    """
+    predictions: List of 0s and 1s (e.g., [0, 0, 1, 1, 0...])
+    """
+    st.subheader("Patient Diagnostic Summary")
+    
+    # 1. Calculate Metrics
+    total_epochs = len(predictions)
+    seizure_epochs = sum(predictions)
+    seizure_seconds = seizure_epochs * window_size
+    seizure_load = (seizure_epochs / total_epochs) * 100
+    
+    # Patient-Level Verdict
+    is_epileptic = seizure_epochs >= 2 # Clinical rule: at least 2 detected epochs
+    
+    # 2. Display KPI Cards
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        color = "normal" if not is_epileptic else "inverse"
+        st.metric("Patient Status", "SEIZURE" if is_epileptic else "NORMAL", 
+                  delta="Alert" if is_epileptic else "Clear", delta_color=color)
+    with col2:
+        st.metric("Total Seizure Time", f"{seizure_seconds}s")
+    with col3:
+        st.metric("Seizure Load", f"{seizure_load:.1f}%", help="Percentage of recording flagged as seizure")
+
+    # 3. Interactive Binary Timeline (Status Bar)
+    st.subheader("Temporal Detection Map")
+    
+    time_axis = np.arange(len(predictions)) * window_size
+    
+    fig = go.Figure()
+
+    # Add the 'Step' chart to show the binary state
+    fig.add_trace(go.Scatter(
+        x=time_axis, y=predictions,
+        mode='lines',
+        line=dict(color='red', width=2, shape='hv'), # 'hv' creates the stair-step look
+        fill='tozeroy', # Fills the area under the '1's
+        name='AI Detection'
+    ))
+
+    # Add Background Shading for clarity
+    fig.add_hrect(y0=0, y1=1, fillcolor="gray", opacity=0.05, layer="below")
+    
+    fig.update_layout(
+        xaxis_title="Time (Seconds)",
+        yaxis=dict(tickvals=[0, 1], ticktext=["Normal", "SEIZURE"], range=[-0.2, 1.2]),
+        height=300,
+        template="plotly_white",
+        margin=dict(l=20, r=20, t=20, b=20)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+def render():
+    API_URL = "http://localhost:8000"
+
+    # Custom CSS for better styling
+    st.markdown("""
+        <style>
+        .upload-box {
+            background-color: #F8FAFC;
+            border: 2px dashed #4A7DFF;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            margin: 1rem 0;
+        }
+        .result-box {
+            background-color: #F5F7FB;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # st.title("Epilepsy Diagnosis")
+    # st.markdown("Upload an EEG file to diagnose epilepsy.")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Centered upload section with better width
+    col_left, col_center, col_right = st.columns([0.5, 2, 0.5])
+    
+    with col_center:
+        st.subheader("Upload EEG File")
+        
+        uploaded_file = st.file_uploader(
+            "Choose an EEG file", 
+            type=["edf", "bdf", "set"],
+            help="Maximum file size: 30MB. European Data Format (EDF) for EEG recordings.",
+            accept_multiple_files=False,
+            label_visibility="collapsed"
+        )
+
+        if uploaded_file is not None:
+            file_size = uploaded_file.size / (1024 * 1024)
+            
+            # File info in columns
+            info_col1, info_col2 = st.columns(2)
+            with info_col1:
+                st.markdown(f"**Filename:** {uploaded_file.name}")
+            with info_col2:
+                st.markdown(f"**Size:** {file_size:.2f} MB")
+            
+            if file_size > 30:
+                st.error(f"File size ({file_size:.2f} MB) exceeds 30MB limit.")
+            else:
+                st.success(f"File uploaded successfully!")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # Add Test Visualization Button
+                col_analyze, col_test = st.columns(2)
+                
+                with col_analyze:
+                    analyze_button = st.button("Analyze EEG", type="primary", use_container_width=True)
+                
+                with col_test:
+                    test_button = st.button("Test Visualization", use_container_width=True)
+
+                # Test Visualization without API call
+                if test_button:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.subheader("Test Diagnosis Results")
+                    
+                    st.markdown("""
+                        <div style="background-color: #FEE2E2; border-left: 4px solid #DC2626; 
+                                    padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                            <h4 style="color: #DC2626; margin: 0 0 0.5rem 0;">Epilepsy Detected (Test)</h4>
+                            <p style="margin: 0; color: #991B1B;">This is a test visualization with dummy data.</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.info("This is test data - no actual analysis performed")
+                    
+                    # Display dashboard with test data
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    test_preds = [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                    display_binary_dashboard(test_preds, window_size=5)
+
+                if analyze_button:
+                    with st.spinner("Analyzing EEG data..."):
+                        try:
+                            files = {
+                                'file': (uploaded_file.name, uploaded_file.getvalue(), 'application/octet-stream')
+                            }
+
+                            start_time = time.time()
+                            response = requests.post(
+                                f'{API_URL}/epilepsy_diagnosis/predict',
+                                files=files,
+                                timeout=120
+                            )
+                            processing_time = time.time() - start_time
+
+                            # response = {
+                            #     'status_code': 200,
+                            #     'json': lambda: {
+                            #         'prediction': 1,
+                            #         'predictions': [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0]
+                            #     }
+                            # }
+
+                            if response.status_code == 200:
+                                result = response.json()
+                                
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                st.subheader("Diagnosis Results")
+
+                                prediction = result.get('prediction')
+                                if prediction == 1:
+                                    st.markdown("""
+                                        <div style="background-color: #FEE2E2; border-left: 4px solid #DC2626; 
+                                                    padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                                            <h4 style="color: #DC2626; margin: 0 0 0.5rem 0;">Epilepsy Detected</h4>
+                                            <p style="margin: 0; color: #991B1B;">The EEG indicates the presence of epilepsy.</p>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+                                else:
+                                    st.markdown("""
+                                        <div style="background-color: #D1FAE5; border-left: 4px solid #059669; 
+                                                    padding: 1.5rem; border-radius: 8px; margin: 1rem 0;">
+                                            <h4 style="color: #059669; margin: 0 0 0.5rem 0;">No Epilepsy Detected</h4>
+                                            <p style="margin: 0; color: #065F46;">The EEG does not indicate epilepsy.</p>
+                                        </div>
+                                    """, unsafe_allow_html=True)
+
+
+                                st.info(f"Processing time: {processing_time:.2f} seconds")
+
+                                # Add Binary Dashboard if predictions are available
+                                if 'predictions' in result:
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    predictions = result['predictions']  # Expected: list of 0s and 1s
+                                    display_binary_dashboard(predictions, window_size=5)
+                                else:
+                                    # Example usage with dummy data (remove when API provides real predictions)
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    preds = [0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+                                    display_binary_dashboard(preds)
+
+                            elif response.status_code == 413:
+                                st.error("File too large for server processing.")
+                            elif response.status_code == 400:
+                                st.error(f"Invalid file: {response.json().get('detail', 'Unknown error')}")
+                            else:
+                                st.error(f"Server error: {response.status_code}")
+
+                        except requests.exceptions.Timeout:
+                            st.error("Request timed out. The file may be too large or server is busy.")
+                        except requests.exceptions.ConnectionError:
+                            st.error("Cannot connect to the server. Please check if the backend is running.")
+                        except Exception as e:
+                            st.error(f"An error occurred: {str(e)}")
+        else:
+            st.info("Please upload an EEG file to begin analysis")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            with st.expander("ℹ️ Expected EDF Format"):
+                st.markdown("""
+                - **Standard European Data Format**
+                - EEG channel recordings
+                - Typically 10-20 system electrode placement
+                - Minimum duration: 5 minutes recommended
+                """)
+
+
+
+
+
+
+
