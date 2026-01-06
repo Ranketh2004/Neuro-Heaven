@@ -1,0 +1,23 @@
+{
+  "model": "Random Forest+calibrated(isotonic)",
+  "threshold": 0.48499999999999993,
+  "outcome_definition": {
+    "target_col": "seizure_freedom_12months",
+    "clinical_standard": "ILAE definition: sustained seizure freedom when patient is seizure-free for >1 year, OR has sporadic seizures separated by a period 3\u00d7 the longest interval between seizures prior to treatment, whichever is longer.",
+    "note": "If your dataset uses a simple '12 months since last seizure' rule without the 3\u00d7 interseizure-interval clause, then it is NOT ILAE-equivalent."
+  },
+  "test_metrics": {
+    "roc_auc": 0.9497309027777777,
+    "avg_precision": 0.9534882088305807,
+    "accuracy": 0.88125,
+    "precision": 0.8927038626609443,
+    "recall": 0.8666666666666667,
+    "f1": 0.879492600422833,
+    "brier": 0.08959599802046787,
+    "ece": 0.037717846081355776
+  },
+  "n_train": 1916,
+  "n_test": 480,
+  "positive_rate_train": 0.5010438413361169,
+  "positive_rate_test": 0.5
+}
