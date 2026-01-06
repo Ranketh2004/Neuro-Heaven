@@ -153,7 +153,7 @@ def render():
             st.image(img_bytes, caption="SOZ likelihood scalp map (backend)", width=520)
         else:
             st.image(
-                "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/soz-labeled.png",
+                "assets/soz-labeled.png",
                 caption="Static placeholder: Labeled SOZ regions",
                 width=520,
             )

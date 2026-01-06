@@ -7,16 +7,20 @@ sys.path.insert(0, str(project_root))
 
 import numpy as np
 import mne 
+import torch
 from mne.preprocessing import ICA
+from mne.decoding import Scaler
 from autoreject import AutoReject
 from sklearn.preprocessing import RobustScaler
 
-from src.helper.logger import get_logger
+from models.autoencoder import AutoEncoder, Encoder, Decoder
+
+#from src.helper.logger import get_logger
 import warnings
 
 warnings.filterwarnings("ignore")
 
-logger = get_logger(__name__)
+# logger = get_logger(__name__)
 
 class EEGPreprocessor:
 
@@ -26,8 +30,8 @@ class EEGPreprocessor:
                  h_freq=40.0,
                  notch_freq=[60, 120],
                  reference='average',
-                 epoch_length=10,
-                 overlap=0.5
+                 epoch_length=2,
+                 overlap=0.0
                  ):
         
         self.target_sfreq = target_sfreq
@@ -37,7 +41,6 @@ class EEGPreprocessor:
         self.reference = reference
         self.epoch_length = epoch_length
         self.overlap = overlap
-        self.scaler = RobustScaler()
 
         # common EEG channels according to 10-20 system of electrode placement
         self.common_channels = [
@@ -83,16 +86,6 @@ class EEGPreprocessor:
         montage = mne.channels.make_standard_montage('standard_1020')
         raw.set_montage(montage, on_missing='warn', verbose=False)
     
-        # # Verify all channels have positions
-        # missing_pos = [ch for ch in raw.ch_names 
-        #                if raw.info['chs'][raw.ch_names.index(ch)]['loc'][:3].sum() == 0]
-    
-        # if missing_pos:
-        #     logger.warning(f"Channels without positions: {missing_pos}")
-        #     # Drop channels without positions
-        #     raw.drop_channels(missing_pos)
-        #     logger.info(f"Dropped {len(missing_pos)} channels without valid positions")
-    
         return raw
     
     def notch_filter(self, raw):
@@ -109,27 +102,6 @@ class EEGPreprocessor:
         
         return raw
     
-    def run_ica(self, raw):
-
-        ica = ICA(n_components=15,
-                  max_iter='auto',
-                  random_state=97,
-                  method='fastica'
-                  )
-
-        ica.fit(raw, verbose=False)
-
-        eog_inds, _ = ica.find_bads_eog(raw, ch_name='FP1')
-
-        if eog_inds and len(eog_inds) > 2:
-            eog_inds = eog_inds[:2]
-
-        ica.exclude = eog_inds
-
-        raw_clean = raw.copy()
-        ica.apply(raw_clean, verbose=False)
-        
-        return raw_clean
     
     def rereference(self, raw):
 
@@ -140,85 +112,57 @@ class EEGPreprocessor:
         return raw
     
 
-    def create_epochs_and_reject(self, raw):
+    def run_pipeline(self, file_path):
 
-        # 5s steps
-        step_duration = self.epoch_length * (1 - self.overlap)
+        raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
 
-        events = mne.make_fixed_length_events(raw,
-                                              duration= step_duration,
-                                              overlap=0.0) #overlap handled in step_duration
+        raw_1 = self.pick_common_channels(raw)
+        raw_2 = self.downsample(raw_1)
+        raw_3 = self.set_montage(raw_2)
+        raw_4 = self.notch_filter(raw_3)
+        raw_5 = self.bandpass_filter(raw_4)
+
+        # 2. Create Epochs
+        events = mne.make_fixed_length_events(raw_5, duration=self.epoch_length, overlap=0)
         epochs = mne.Epochs(
-            raw,
-            events,
-            tmin=0,
-            tmax=self.epoch_length,
-            baseline=None,
-            preload=True,
-            verbose=False
+            raw_5, events, tmin=0, tmax=self.epoch_length - (1 / self.target_sfreq), 
+            baseline=None, preload=True, verbose=False
         )
 
-        print(f'Original Epoch count: {len(epochs)}')
+        # 6. Scaling
+        scaler = Scaler(info=epochs.info, scalings='mean')
+        X_scaled = scaler.fit_transform(epochs.get_data())
+        
+        return X_scaled
 
-        #artifact rejection
-        ar = AutoReject(
-            n_interpolate=[1,2],
-            random_state=42,
-            n_jobs=-1,
-            verbose=False
-        )
-
-        #find bad epochs, repairs sensors, and drops unfixable data
-        epochs_clean, reject_log = ar.fit_transform(epochs)
-
-        print(f'Cleaned Epoch count: {len(epochs_clean)}')
-
-        return epochs_clean
-    
-    def normalize(self, epochs):
-
-        data = epochs.get_data() # (n_epochs, n_channels, n_times)
-
-        for i in range(data.shape[1]):
-            scaler = RobustScaler()
-            #reshape to (n_epochs * n_times, 1) to learn scale for a channel
-            channel_data = data[:, i, :].reshape(-1, 1)
-            scaler.fit(channel_data)
-            # transform and put back
-            data[:, i, :] = scaler.transform(channel_data).reshape(data.shape[0], data.shape[2])
-
-        return data
-    
-    def run_pipeline(self, raw_path):
-
-        raw = mne.io.read_raw_edf(raw_path, preload=True, verbose=False)
-
-        raw = self.pick_common_channels(raw)
-        raw = self.set_montage(raw)
-
-        raw = self.notch_filter(raw)
-        raw = self.bandpass_filter(raw)
-
-        raw = self.downsample(raw)
-
-        raw = self.run_ica(raw)
-
-        raw = self.rereference(raw)
-
-        epochs = self.create_epochs_and_reject(raw)
-
-        final_data = self.normalize(epochs)
-
-        return final_data
 
 if __name__ == "__main__":
 
     preprocessor = EEGPreprocessor()
 
-    sample_file = 'data/aaaaaebo_s003_t001.edf'  
+    sample_file = 'data/raw/aaaaalim_s001_t001.edf'  
 
     processed_data = preprocessor.run_pipeline(sample_file)
-
     print(f'Processed data shape: {processed_data.shape}')
+
+    processed_tensor = torch.from_numpy(processed_data).float()
+    print(f'Processed tensor shape: {processed_tensor.shape}')
+
+    model_path = 'src/models/eeg_autoencoder.pth'
+    #autoencoder = AutoEncoder(channels=16, latent_dim=16, target_length=500)
+    torch.serialization.add_safe_globals([AutoEncoder, Encoder, Decoder])
+    #autoencoder.load_state_dict(torch.load(model_path, map_location=torch.device('cpu'), weights_only=False))
+
+    autoencoder = torch.load(model_path, map_location=torch.device('cpu'), weights_only=False)
+
+    autoencoder.eval()
+
+    with torch.no_grad():
+        _, z = autoencoder(processed_tensor)
+        print(f'Latent representation shape: {z.shape}')
+        print(f'Latent representation: {z}')
+
+
+    
 
 
