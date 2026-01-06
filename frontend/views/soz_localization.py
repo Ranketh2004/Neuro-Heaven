@@ -1,5 +1,10 @@
 import streamlit as st
+import requests
+import base64
+from io import BytesIO
 
+BACKEND_URL = "http://127.0.0.1:8000"
+SOZ_ENDPOINT = f"{BACKEND_URL}/epilepsy_diagnosis/soz/predict"
 
 def render():
     # Determine sub-view (upload vs results)
@@ -76,18 +81,36 @@ def render():
         uploaded_name = st.session_state.get("uploaded_file_name", "example.edf")
         st.markdown(f'<div class="nh-sub">File analyzed: <strong>{uploaded_name}</strong> · Prototype visualization</div>', unsafe_allow_html=True)
 
-        # Hardcoded placeholder channel likelihoods
-        channels = [
-            {"name": "T7", "p": 0.88},
-            {"name": "F7", "p": 0.81},
-            {"name": "P7", "p": 0.64},
-            {"name": "T8", "p": 0.74},
-            {"name": "F8", "p": 0.59},
-            {"name": "C3", "p": 0.37},
-            {"name": "C4", "p": 0.29},
-            {"name": "O1", "p": 0.22},
-            {"name": "O2", "p": 0.18},
-        ]
+        data = st.session_state.get("soz_result", None)
+
+        # fallback if backend result missing
+        backend_channels = []
+        backend_img_b64 = None
+
+        if isinstance(data, dict) and data.get("ok"):
+            backend_channels = data.get("top_channels", [])
+            backend_img_b64 = data.get("topomap_png_base64", None)
+
+        # Convert to your UI expected format (backend returns "channel" and "soz_probability")
+        channels = []
+        for row in backend_channels:
+            ch_name = row.get("channel", row.get("name", "UNK"))
+            ch_prob = float(row.get("soz_probability", row.get("p", 0.0)))
+            channels.append({"name": ch_name, "p": ch_prob})
+
+        # If backend failed or empty, keep your old placeholders (so UI never breaks)
+        if not channels:
+            channels = [
+                {"name": "T7", "p": 0.88},
+                {"name": "F7", "p": 0.81},
+                {"name": "P7", "p": 0.64},
+                {"name": "T8", "p": 0.74},
+                {"name": "F8", "p": 0.59},
+                {"name": "C3", "p": 0.37},
+                {"name": "C4", "p": 0.29},
+                {"name": "O1", "p": 0.22},
+                {"name": "O2", "p": 0.18},
+            ]
 
         def risk(p):
             if p >= 0.75:
@@ -125,11 +148,16 @@ def render():
 
         # Right: Static labeled SOZ image
         st.markdown('<div class="card img-card">', unsafe_allow_html=True)
-        st.image(
-            "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/soz-labeled.png",
-            caption="Static placeholder: Labeled SOZ regions",
-            width=520,
-        )
+        if backend_img_b64:
+            img_bytes = base64.b64decode(backend_img_b64)
+            st.image(img_bytes, caption="SOZ likelihood scalp map (backend)", width=520)
+        else:
+            st.image(
+                "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/soz-labeled.png",
+                caption="Static placeholder: Labeled SOZ regions",
+                width=520,
+            )
+
         st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)  # end .grid
@@ -182,18 +210,44 @@ def render():
 
         if uploaded is not None:
             st.session_state["uploaded_file_name"] = uploaded.name
+
             try:
-                st.toast("File received. Preparing results…", icon="🧠")
+                st.toast("Uploading to backend…", icon="🧠")
             except Exception:
                 pass
+
+            # ✅ Call backend (SOZ endpoint)
             try:
-                st.query_params = {"page": "soz", "mode": "results"}
-            except Exception:
+                files = {"file": (uploaded.name, uploaded.getvalue(), "application/octet-stream")}
+                resp = requests.post(SOZ_ENDPOINT, files=files, timeout=180)
+                if resp.status_code != 200:
+                    st.error(f"Backend error ({resp.status_code}): {resp.text}")
+                    st.stop()
+
+                data = resp.json()
+
+                # Save results for the results page
+                st.session_state["soz_result"] = data
+
                 try:
-                    st.experimental_set_query_params(page="soz", mode="results")
+                    st.toast("Analysis complete ✅", icon="✅")
                 except Exception:
                     pass
-            st.rerun()
+
+                # navigate to results
+                try:
+                    st.query_params = {"page": "soz", "mode": "results"}
+                except Exception:
+                    try:
+                        st.experimental_set_query_params(page="soz", mode="results")
+                    except Exception:
+                        pass
+                st.rerun()
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Could not connect to backend: {e}")
+                st.stop()
+
 
         st.markdown('</div>', unsafe_allow_html=True)  # end .upload-area
         st.markdown('</div>', unsafe_allow_html=True)  # end .card
