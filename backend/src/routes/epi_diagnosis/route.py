@@ -1,9 +1,11 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 import os
-from pathlib import Path
 import tempfile
 import logging
 from typing import Dict, Any
+import traceback
+
+#from services.epi_diagnosis.preprocessing_service import EEGPreprocessor
 
 
 epi_router = APIRouter()
@@ -23,12 +25,32 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
             temp_filepath = temp_file.name
             content = await file.read()
             temp_file.write(content)
+            temp_file.flush()
             logger.info(f"Temporary file created at: {temp_filepath}")
             logger.info(f"File size: {len(content)} bytes")
 
+            # try:
+            #     logger.info("Initializing preprocessor...")
+            #     preprocesser = EEGPreprocessor()
+                
+            #     logger.info("Starting preprocessing pipeline...")
+            #     processed_data = preprocesser.run_pipeline(temp_filepath)
+                
+            #     logger.info(f"Preprocessing completed successfully!")
+            #     logger.info(f"Processed data shape: {processed_data.shape}")
+            #     print(f"Processed data shape: {processed_data.shape}")
+                
+            # except Exception as preprocess_error:
+            #     logger.error(f"Preprocessing failed with error: {preprocess_error}")
+            #     logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            #     raise HTTPException(
+            #         status_code=422, 
+            #         detail=f"Preprocessing error: {str(preprocess_error)}"
+            #     )
+
         # Placeholder prediction results
-        prediction = 1  # Overall prediction (0 or 1)
-        predictions = [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0]  # Predictions for segments
+        prediction = 1
+        predictions = [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0]
         
         logger.info(f"Prediction completed for: {file.filename}")
         
@@ -41,9 +63,7 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Unexpected error during prediction: {e}")
-        raise HTTPException(status_code=500, 
-                            detail=f"Error processing EDF file: {str(e)}"
-                            )
+        raise HTTPException(status_code=500, detail=f"Error processing EDF file: {str(e)}")
     finally:
         if temp_filepath and os.path.exists(temp_filepath):
             try:
@@ -51,6 +71,49 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
                 logger.info(f"Temporary file {temp_filepath} deleted.")
             except Exception as e:
                 logger.warning(f"Failed to delete temporary file {temp_filepath}: {str(e)}")
+
+
+# =========================
+# NEW FEATURE (ADD)
+# POST /epilepsy_diagnosis/soz/predict
+# =========================
+@epi_router.post("/soz/predict")
+async def predict_soz(
+    request: Request,
+    file: UploadFile = File(...)
+) -> Dict[str, Any]:
+    try:
+        if not file.filename.lower().endswith(".edf"):
+            raise HTTPException(status_code=400, detail="Only EDF files are supported for SOZ.")
+
+        content = await file.read()
+
+        # IMPORTANT: this service must be loaded in main.py startup:
+        # app.state.soz_service = SOZInferenceService(...)
+        if not hasattr(request.app.state, "soz_service"):
+            raise HTTPException(
+                status_code=500,
+                detail="SOZ service not loaded. Check main.py startup load_models()."
+            )
+
+        soz_service = request.app.state.soz_service
+        out = soz_service.predict_from_edf_bytes(
+            edf_bytes=content,
+            filename=file.filename,
+            tmin=0.0,
+            window_sec=10.0,
+        )
+
+        if not out.get("ok", False):
+            raise HTTPException(status_code=422, detail=out.get("error", "SOZ prediction failed."))
+
+        return out
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SOZ prediction failed: {e}")
+        raise HTTPException(status_code=500, detail=f"SOZ prediction error: {str(e)}")
 
 
 @epi_router.get("/health")
