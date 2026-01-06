@@ -1,6 +1,10 @@
 import streamlit as st
 from pathlib import Path
 import os
+import requests
+import base64
+import io
+
 
 def render():
     # Top wrapper to align content
@@ -29,11 +33,15 @@ def render():
 
         st.write("")
 
+        # Allow selecting any file so OS file dialog won't gray out .nii.gz;
+        # validate extension after upload.
         uploaded_file = st.file_uploader(
             "Choose MRI file (.nii / .nii.gz) or an image (jpg/png)",
-            type=["nii", "nii.gz", "jpg", "jpeg", "png"],
+            type=None,
             help="Select a single .nii, .nii.gz or image file",
         )
+
+        allowed_exts = ('.nii', '.nii.gz', '.jpg', '.jpeg', '.png')
 
         # hard-coded sample image path to show when an image is uploaded
         sample_image_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fcd.jpg")
@@ -41,6 +49,13 @@ def render():
         if uploaded_file is not None:
             # uploaded_file is a Streamlit UploadedFile object
             name = uploaded_file.name
+            lower_name = name.lower()
+            if not lower_name.endswith(allowed_exts):
+                st.error("Unsupported file type. Please upload a .nii, .nii.gz or image file.")
+                uploaded_file = None
+            else:
+                # continue processing
+                pass
             try:
                 size = uploaded_file.size
             except Exception:
@@ -97,8 +112,30 @@ def render():
             st.info("No file selected. Please upload a .nii, .nii.gz or image file to enable analysis.")
 
         if 'analyze' in locals() and analyze:
-            # Frontend placeholder for analysis step
-            with st.spinner("Preparing analysis (frontend-only)..."):
-                st.success("File received. Analysis backend is not yet wired — implement processing to run the model.")
+            # Call backend MRI prediction endpoint
+            with st.spinner("Uploading and analyzing MRI..."):
+                try:
+                    url = "http://127.0.0.1:8000/epilepsy_diagnosis/mri/predict"
+                    # uploaded_file is a Streamlit UploadedFile
+                    files = {"file": (name, uploaded_file.getvalue(), uploaded_file.type)}
+                    resp = requests.post(url, files=files, timeout=120)
+
+                    if resp.status_code != 200:
+                        st.error(f"Backend error: {resp.status_code} - {resp.text}")
+                    else:
+                        data = resp.json()
+                        img_b64 = data.get("image_b64")
+                        stats = data.get("stats")
+
+                        if img_b64:
+                            img_bytes = base64.b64decode(img_b64)
+                            st.image(img_bytes, caption="FCD overlay (backend)", use_column_width=True)
+
+                        if stats:
+                            st.markdown("**Prediction stats**")
+                            st.json(stats)
+
+                except Exception as e:
+                    st.error(f"Failed to call backend: {e}")
 
     st.markdown("</div>", unsafe_allow_html=True)
