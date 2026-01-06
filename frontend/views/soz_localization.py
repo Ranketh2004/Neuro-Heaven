@@ -79,7 +79,7 @@ def render():
         st.markdown('<div class="container"><div class="soz-wrapper results">', unsafe_allow_html=True)
         st.markdown('<div class="nh-title">Seizure Onset Zone (SOZ) Likelihood Analysis</div>', unsafe_allow_html=True)
         uploaded_name = st.session_state.get("uploaded_file_name", "example.edf")
-        st.markdown(f'<div class="nh-sub">File analyzed: <strong>{uploaded_name}</strong> · Prototype visualization</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="nh-sub">File analyzed: <strong>{uploaded_name}</strong> </div>', unsafe_allow_html=True)
 
         data = st.session_state.get("soz_result", None)
 
@@ -154,7 +154,7 @@ def render():
         else:
             st.image(
                 "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/soz-labeled.png",
-                caption="Static placeholder: Labeled SOZ regions",
+                caption="Labeled SOZ regions",
                 width=520,
             )
 
