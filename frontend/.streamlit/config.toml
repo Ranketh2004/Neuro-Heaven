@@ -1,0 +1,13 @@
+[server]
+port = 3001
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 500
+
+[theme]
+primaryColor = "#4A7DFF"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F7FB"
+textColor = "#163354"
+font = "sans serif"
