@@ -683,12 +683,12 @@ def _clinician_summary(
 
     if likely:
         impression = (
-            f"**Assessment:** Estimated probability of **seizure freedom at 12 months = {pct}** "
+            f"Estimated probability of **seizure freedom at 12 months = {pct}** "
             f"(**{band} likelihood**). This leans toward seizure freedom, but uncertainty remains."
         )
     else:
         impression = (
-            f"**Assessment:** Estimated probability of **seizure freedom at 12 months = {pct}** "
+            f"Estimated probability of **seizure freedom at 12 months = {pct}** "
             f"(**{band} likelihood**). This leans away from seizure freedom without optimization."
         )
 
@@ -718,7 +718,7 @@ def _clinician_summary(
         lines.append("")
 
     if asm_notes:
-        lines.append("**Medication note (rule-based):**")
+        lines.append("**Medication note:**")
         for n in asm_notes[:3]:
             lines.append(f"- {n}")
         lines.append("")
@@ -734,10 +734,6 @@ def _clinician_summary(
     lines.append("- Ensure EEG/MRI are formally reviewed and correlate with semiology.")
     lines.append("- Reassess at follow-up with early response (first 4–12 weeks often changes prognosis).")
     lines.append("")
-    lines.append(
-        "**Clinical interpretation:** This is a calibrated risk estimate, not a diagnosis. "
-        "Use alongside clinical judgment and guideline-based management."
-    )
 
     return "\n".join(lines)
 

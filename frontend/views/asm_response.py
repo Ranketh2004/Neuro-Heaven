@@ -424,4 +424,4 @@ def render():
             </html>
             """).strip()
 
-            components.html(card_html, height=560, scrolling=True)
+            components.html(card_html, height=1000, scrolling=False)
