@@ -21,11 +21,6 @@ app = FastAPI(
 # Define allowed origins for CORS
 origins = [
     "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://0.0.0.0:3000",
-    # Add any machine-local IPs Streamlit may advertise (network URL)
-    "http://172.28.16.40:3000",
-    "http://124.43.209.181:3000",
     "http://localhost:8501",
 ]
 
@@ -37,15 +32,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ✅ Register routers
 app.include_router(
     epi_router,
     prefix="/epilepsy_diagnosis",
     tags=["Epilepsy Diagnosis"]
 )
-
-# ✅ Load SOZ model + artifacts once at startup
 @app.on_event("startup")
 def load_soz_service():
     """
