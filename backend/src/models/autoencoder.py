@@ -92,6 +92,7 @@ class AutoEncoder(nn.Module):
     
     def decode(self, z):
         return self.decoder(z)
-    
+
+
 def loss_function(recon_x, x):
     return F.mse_loss(recon_x, x, reduction='mean')

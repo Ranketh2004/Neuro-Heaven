@@ -3,15 +3,14 @@ import os
 import tempfile
 import logging
 from typing import Dict, Any
+import traceback
+
+#from services.epi_diagnosis.preprocessing_service import EEGPreprocessor
 
 
 epi_router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# =========================
-# EXISTING FEATURE (KEEP)
-# POST /epilepsy_diagnosis/predict
-# =========================
 @epi_router.post("/predict")
 async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
     temp_filepath = None
@@ -26,8 +25,28 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
             temp_filepath = temp_file.name
             content = await file.read()
             temp_file.write(content)
+            temp_file.flush()
             logger.info(f"Temporary file created at: {temp_filepath}")
             logger.info(f"File size: {len(content)} bytes")
+
+            # try:
+            #     logger.info("Initializing preprocessor...")
+            #     preprocesser = EEGPreprocessor()
+                
+            #     logger.info("Starting preprocessing pipeline...")
+            #     processed_data = preprocesser.run_pipeline(temp_filepath)
+                
+            #     logger.info(f"Preprocessing completed successfully!")
+            #     logger.info(f"Processed data shape: {processed_data.shape}")
+            #     print(f"Processed data shape: {processed_data.shape}")
+                
+            # except Exception as preprocess_error:
+            #     logger.error(f"Preprocessing failed with error: {preprocess_error}")
+            #     logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            #     raise HTTPException(
+            #         status_code=422, 
+            #         detail=f"Preprocessing error: {str(preprocess_error)}"
+            #     )
 
         # Placeholder prediction results
         prediction = 1

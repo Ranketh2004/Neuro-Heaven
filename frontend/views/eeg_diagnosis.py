@@ -164,14 +164,6 @@ def render():
                             )
                             processing_time = time.time() - start_time
 
-                            # response = {
-                            #     'status_code': 200,
-                            #     'json': lambda: {
-                            #         'prediction': 1,
-                            #         'predictions': [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0]
-                            #     }
-                            # }
-
                             if response.status_code == 200:
                                 result = response.json()
                                 
