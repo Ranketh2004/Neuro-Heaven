@@ -54,11 +54,12 @@ header[data-testid="stHeader"] {
 }
 
 /* NAV ---------------------------------------------------------- */
+/* NAV ---------------------------------------------------------- */
 .nh-nav {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.9rem 0;
+    padding: 0.9rem 1rem;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
     background: rgba(255, 255, 255, 0.96);
@@ -74,6 +75,7 @@ header[data-testid="stHeader"] {
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    min-width: fit-content;
 }
 
 .nh-logo {
@@ -97,14 +99,16 @@ header[data-testid="stHeader"] {
     margin-left: 0.15rem;
 }
 
+/* Desktop menu container */
 .nh-center-nav {
     display: flex;
     gap: 2.2rem;
     font-size: 0.98rem;
     font-weight: 500;
     color: #4C5A6B;
-    margin-left: 15rem;
-    margin-right: auto;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
 }
 
 .nh-center-nav form {
@@ -121,21 +125,95 @@ header[data-testid="stHeader"] {
     cursor: pointer;
     position: relative;
     padding-bottom: 0.1rem;
+    white-space: nowrap;
 }
 
-.nh-nav-link:hover {
-    color: #1B2B3C;
-}
+.nh-nav-link:hover { color: #1B2B3C; }
 
 .nh-nav-link.active {
     color: #74B0D3 !important;
     font-weight: 700;
 }
 
-.nh-right {
-    display: flex;
-    align-items: center;
+/* MOBILE: hamburger */
+.nh-hamburger {
+    display: none;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.4rem;
+    border-radius: 10px;
 }
+.nh-hamburger svg { width: 28px; height: 28px; fill: #1E3A5F; }
+.nh-hamburger:hover { background: rgba(116, 176, 211, 0.12); }
+
+/* Overlay menu (mobile) */
+.nh-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 16, 28, 0.92);
+    z-index: 9999;
+    display: none;
+}
+
+/* show overlay when targeted */
+.nh-overlay:target {
+    display: block;
+}
+
+.nh-overlay-inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.nh-overlay-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.1rem 1.2rem;
+}
+
+.nh-overlay-close {
+    font-size: 2rem;
+    line-height: 1;
+    text-decoration: none;
+    color: #ffffff;
+    opacity: 0.9;
+}
+.nh-overlay-close:hover { opacity: 1; }
+
+.nh-overlay-menu {
+    padding: 0.5rem 1.2rem 2rem 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.nh-overlay-menu form { margin: 0; }
+
+.nh-overlay-link {
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    font-size: 1.4rem;
+    font-weight: 600;
+    padding: 0.4rem 0;
+    cursor: pointer;
+}
+
+.nh-overlay-link.active {
+    color: #74B0D3;
+}
+
+/* Responsive switch */
+@media (max-width: 900px) {
+    .nh-center-nav { display: none; }
+    .nh-hamburger { display: inline-flex; }
+}
+
 
 /* HERO --------------------------------------------------------- */
 .nh-hero-wrapper {
@@ -400,7 +478,52 @@ st.markdown(f"""
 </form>
 
 </div>
+
+<!-- Mobile hamburger -->
+<a class="nh-hamburger" href="#nh-menu" aria-label="Open menu">
+<svg viewBox="0 0 24 24" aria-hidden="true">
+<path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
+</svg>
+</a>
 </div>
+<!-- Mobile overlay menu -->
+<div id="nh-menu" class="nh-overlay">
+<div class="nh-overlay-inner">
+<div class="nh-overlay-top">
+<div style="display:flex;align-items:center;gap:0.6rem;">
+{logo_tag}
+<div style="display:flex;align-items:center;">
+<span class="nh-brand-text-main" style="color:#fff;">NEURO</span>
+<span class="nh-brand-text-sub">HEAVEN</span>
+</div>
+</div>
+<a href="#" class="nh-overlay-close" aria-label="Close menu">&times;</a>
+</div>
+
+<div class="nh-overlay-menu">
+<form method="get"><input type="hidden" name="page" value="home">
+<button class="nh-overlay-link {'active' if current_page=='home' else ''}">Home</button>
+</form>
+
+<form method="get"><input type="hidden" name="page" value="eeg">
+<button class="nh-overlay-link {'active' if current_page=='eeg' else ''}">EEG Diagnosis</button>
+</form>
+
+<form method="get"><input type="hidden" name="page" value="soz">
+<button class="nh-overlay-link {'active' if current_page=='soz' else ''}">SOZ Localization</button>
+</form>
+
+<form method="get"><input type="hidden" name="page" value="mri">
+<button class="nh-overlay-link {'active' if current_page=='mri' else ''}">MRI Detection</button>
+</form>
+
+<form method="get"><input type="hidden" name="page" value="asm">
+<button class="nh-overlay-link {'active' if current_page=='asm' else ''}">ASM Response</button>
+</form>
+</div>
+</div>
+</div>
+
 """, unsafe_allow_html=True)
 
 
