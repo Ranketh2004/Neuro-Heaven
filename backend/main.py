@@ -5,6 +5,7 @@ import logging
 
 from src.routes.epi_diagnosis import epi_router
 from src.services.epi_diagnosis.soz_inference_service import SOZInferenceService
+from src.services.epi_diagnosis.mri_inference_service import MRIFCDInferenceService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -31,15 +32,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ✅ Register routers
 app.include_router(
     epi_router,
     prefix="/epilepsy_diagnosis",
     tags=["Epilepsy Diagnosis"]
 )
-
-# ✅ Load SOZ model + artifacts once at startup
 @app.on_event("startup")
 def load_soz_service():
     """
@@ -53,12 +50,29 @@ def load_soz_service():
     models_dir = Path(__file__).parent / "src" / "models"
     logger.info(f"Loading SOZ service from: {models_dir}")
 
-    app.state.soz_service = SOZInferenceService(
-        models_dir=models_dir,
-        device="cpu"
-    )
+    try:
+        app.state.soz_service = SOZInferenceService(
+            models_dir=models_dir,
+            device="cpu"
+        )
+        logger.info("SOZ service loaded and ready.")
+    except ModuleNotFoundError as e:
+        logger.warning(f"Optional dependency missing for SOZ service: {e}. Continuing without SOZ service.")
+    except Exception as e:
+        logger.error(f"Failed to load SOZ service: {e}. Continuing without SOZ service.")
 
-    logger.info("SOZ service loaded and ready.")
+    # Load MRI FCD model/service
+    try:
+        mri_model_path = models_dir / "best.pt"
+        logger.info(f"Loading MRI FCD service from: {mri_model_path}")
+        app.state.mri_service = MRIFCDInferenceService(
+            model_pt_path=str(mri_model_path),
+            img_size=192,
+            base_ch=16,
+        )
+        logger.info("MRI FCD service loaded and ready.")
+    except Exception as e:
+        logger.error(f"Failed to load MRI service: {e}")
 
 
 if __name__ == "__main__":
