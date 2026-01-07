@@ -79,7 +79,7 @@ def render():
         st.markdown('<div class="container"><div class="soz-wrapper results">', unsafe_allow_html=True)
         st.markdown('<div class="nh-title">Seizure Onset Zone (SOZ) Likelihood Analysis</div>', unsafe_allow_html=True)
         uploaded_name = st.session_state.get("uploaded_file_name", "example.edf")
-        st.markdown(f'<div class="nh-sub">File analyzed: <strong>{uploaded_name}</strong> · Prototype visualization</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="nh-sub">File analyzed: <strong>{uploaded_name}</strong> </div>', unsafe_allow_html=True)
 
         data = st.session_state.get("soz_result", None)
 
@@ -146,17 +146,27 @@ def render():
         table_html.extend(['</tbody>', '</table>', '</div>'])
         st.markdown("\n".join(table_html), unsafe_allow_html=True)
 
-        # Right: Static labeled SOZ image
+        # Right: SOZ Brain Topomap
         st.markdown('<div class="card img-card">', unsafe_allow_html=True)
         if backend_img_b64:
-            img_bytes = base64.b64decode(backend_img_b64)
-            st.image(img_bytes, caption="SOZ likelihood scalp map (backend)", width=520)
+            try:
+                img_bytes = base64.b64decode(backend_img_b64)
+                st.image(img_bytes, caption="SOZ Likelihood Brain Map (Red=High Risk, Yellow=Moderate, Green=Low)", use_container_width=True)
+            except Exception as e:
+                st.warning(f"Could not decode brain map image: {e}")
+                st.info("Brain visualization not available for this analysis.")
         else:
-            st.image(
-                "assets/soz-labeled.png",
-                caption="Static placeholder: Labeled SOZ regions",
-                width=520,
-            )
+            # Check if fallback image exists
+            fallback_path = "/Users/duviniranaweera/Documents/Neuro-Heaven/frontend/assets/soz-labeled.png"
+            import os
+            if os.path.exists(fallback_path):
+                st.image(
+                    fallback_path,
+                    caption="Placeholder: Standard SOZ regions",
+                    use_container_width=True,
+                )
+            else:
+                st.info("Brain visualization not available. The backend did not generate a topomap for this file.")
 
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -200,11 +210,11 @@ def render():
             # Use a versioned key so the widget resets when user chooses to upload another
             uploader_key = f"eeg_uploader_{st.session_state['uploader_version']}"
             uploaded = st.file_uploader(
-                "",
+                "Upload EEG File",
                 type=["edf", "csv"],
-                label_visibility="hidden",
+                label_visibility="collapsed",
                 accept_multiple_files=False,
-                help="",
+                help="Upload an EDF or CSV file containing EEG data",
                 key=uploader_key,
             )
 
