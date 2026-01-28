@@ -4,25 +4,89 @@ import os
 import requests
 import base64
 import io
-
+from textwrap import dedent
 
 def render():
-    # Top wrapper to align content
-    st.markdown("<div style='max-width:1100px;margin:1.2rem auto;'>", unsafe_allow_html=True)
+    # CSS/theme - Updated to center the Analyze button horizontally
+    st.markdown(
+        dedent("""
+        <style>
+          .asm-title { font-size: 2.5rem; font-weight: 800; color:#1E3A5F; }
+          .asm-subtitle { color:#49576B; margin-top:-0.4rem; }
+          .asm-section-title { font-size: 1.25rem; font-weight: 800; color:#1E3A5F; margin-bottom:0.25rem; }
+          .asm-divider { height: 1px; background: rgba(226,232,240,0.9); margin: 0.9rem 0; }
+          
+          /* Input and Select styling */
+          div[data-testid="column"] { padding-left: 1rem; padding-right: 1rem; }
+          div[data-baseweb="input"] > div, div[data-baseweb="select"] > div { border-radius: 12px !important; }
+          
+          /* Horizontal Centering for the Analyze Button */
+          div.stButton {
+            display:flex !important;
+            justify-content:center !important;
+            align-items:center !important;
+            margin-left: clamp(0rem, 24vw, 24rem) !important;
+          }
 
-    # Two-column layout: left for the pill/title (upper-left), right for description and uploader
-    col_left, col_right = st.columns([1, 2])
+          /* Primary Button styling (Matched to File 1) */
+          button[data-testid="stBaseButton-primary"],
+          button[kind="primary"],
+          div[data-testid="stFormSubmitButton"] button {
+            width: auto !important;
+            padding: 0.85rem 1.75rem !important;
+            border-radius: 14px !important;
+            font-size: 1.15rem !important;
+            font-weight: 700 !important;
+            background: #74B0D3 !important;
+            border: 1px solid #74B0D3 !important;
+            color: #ffffff !important;
+            white-space: nowrap !important;
+            text-align: center !important;
+            transition: background 0.2s ease;
+          }
 
-    with col_left:
-        st.title("MRI Detection")
-        st.markdown("Upload a brain MRI file to analyze.")
+          button[data-testid="stBaseButton-primary"]:hover,
+          button[kind="primary"]:hover {
+            background: #67A3C7 !important;
+            border: 1px solid #67A3C7 !important;
+            color: #ffffff !important;
+          }
+          
+          /* Custom container for upload instructions */
+          .mri-upload-container {
+            padding: 1.5rem;
+            border-radius: 18px;
+            background: #ffffff;
+            border: 1px solid rgba(226,232,240,0.95);
+            box-shadow: 0 10px 26px rgba(15,23,42,0.05);
+            margin-bottom: 1.5rem;
+          }
+        </style>
+        """).strip(),
+        unsafe_allow_html=True,
+    )
 
-    with col_right:
+    # Centered layout matching the screenshot
+    left, mid, right = st.columns([2, 28, 2], vertical_alignment="top")
+
+    with mid:
+        st.markdown(
+            dedent("""
+            <div>
+              <div class="asm-title">MRI Detection</div>
+              <p class="asm-subtitle">Upload a brain MRI file to analyze and detect potential abnormalities.</p>
+            </div>
+            """).strip(),
+            unsafe_allow_html=True,
+        )
+        
+        st.write("") 
+
         st.markdown(
             """
-            <div style='padding:1rem;border-radius:12px;background:#ffffff;border:1px solid #E8F0FF;'>
-                <h3 style='margin-top:0;color:#1E3A5F;'>Upload instructions</h3>
-                <p style='color:#4B5563;margin-top:0.25rem;'>
+            <div class="mri-upload-container">
+                <div class="asm-section-title">Upload Instructions</div>
+                <p style='color:#4B5563; margin-top:0.5rem; line-height:1.5;'>
                     Please upload a <strong>.nii</strong> or <strong>.nii.gz</strong> file containing a single MRI volume.
                     Files should be anonymized before upload. This frontend only collects the file — connect a backend process to run the model.
                 </p>
@@ -31,10 +95,6 @@ def render():
             unsafe_allow_html=True,
         )
 
-        st.write("")
-
-        # Allow selecting any file so OS file dialog won't gray out .nii.gz;
-        # validate extension after upload.
         uploaded_file = st.file_uploader(
             "Choose MRI file (.nii / .nii.gz) or an image (jpg/png)",
             type=None,
@@ -42,82 +102,60 @@ def render():
         )
 
         allowed_exts = ('.nii', '.nii.gz', '.jpg', '.jpeg', '.png')
-
-        # hard-coded sample image path to show when an image is uploaded
         sample_image_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fcd.jpg")
 
         if uploaded_file is not None:
-            # uploaded_file is a Streamlit UploadedFile object
             name = uploaded_file.name
             lower_name = name.lower()
+            
             if not lower_name.endswith(allowed_exts):
                 st.error("Unsupported file type. Please upload a .nii, .nii.gz or image file.")
                 uploaded_file = None
             else:
-                # continue processing
-                pass
-            try:
-                size = uploaded_file.size
-            except Exception:
-                size = len(uploaded_file.getbuffer())
-            size_kb = size / 1024
-
-            st.markdown(
-                f"""
-                <div style='padding:12px;border-radius:12px;background:#F8FAFF;border:1px solid #E8F0FF; margin-top:0.6rem;'>
-                    <strong>Selected file:</strong> {name} <br/>
-                    <strong>Size:</strong> {size_kb:.1f} KB
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # If the uploaded file is an image type, show the hard-coded image view
-            lower_name = name.lower()
-            if lower_name.endswith(('.jpg', '.jpeg', '.png')):
-                st.success("Image uploaded — showing sample FCD image (frontend-only).")
-
-                # show the hard-coded image if it exists
-                img_path = Path(sample_image_path)
-                if img_path.exists():
-                    st.image(str(img_path), caption="FCD sample image", use_column_width=True)
-                else:
-                    st.error(f"Sample image not found at: {sample_image_path}")
-
-                # provide a button to proceed (simulated routing to another step)
-                if st.button("Proceed"):
-                    st.info("Routed to image viewer (frontend placeholder).")
-                    # show the image again in a larger container
-                    if img_path.exists():
-                        st.image(str(img_path), caption="FCD sample image (viewer)", use_column_width=True)
-
-            else:
-                # Non-image (assume MRI .nii/.nii.gz) keep existing behavior
                 try:
-                    file_bytes = uploaded_file.getvalue()
-                    st.download_button("Download uploaded file", data=file_bytes, file_name=name)
+                    size = uploaded_file.size
                 except Exception:
-                    # fallback: no download offered
-                    pass
+                    size = len(uploaded_file.getbuffer())
+                size_kb = size / 1024
 
-        # Action buttons under upload area
-        cols = st.columns([1, 1])
-        with cols[0]:
-            analyze_disabled = uploaded_file is None
-            analyze = st.button("Analyze MRI", disabled=analyze_disabled)
-        with cols[1]:
-            st.write("\n")
+                st.markdown(
+                    f"""
+                    <div style='padding:12px; border-radius:12px; background:#F8FAFF; border:1px solid #74B0D3; margin-top:0.6rem; color: #1E3A5F;'>
+                        <strong>Selected file:</strong> {name} <br/>
+                        <strong>Size:</strong> {size_kb:.1f} KB
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if lower_name.endswith(('.jpg', '.jpeg', '.png')):
+                    st.success("Image uploaded — showing sample FCD image (frontend-only).")
+                    img_path = Path(sample_image_path)
+                    if img_path.exists():
+                        st.image(str(img_path), caption="FCD sample image", use_column_width=True)
+                    
+                    if st.button("Proceed", type="primary"):
+                        st.info("Routed to image viewer (frontend placeholder).")
+                else:
+                    try:
+                        file_bytes = uploaded_file.getvalue()
+                    except Exception:
+                        pass
+
+        st.markdown('<div class="asm-divider"></div>', unsafe_allow_html=True)
+
+        # Action Button - Now centered horizontally via CSS
+        analyze_disabled = uploaded_file is None
+        analyze = st.button("Analyze MRI", disabled=analyze_disabled, type="primary")
 
         if uploaded_file is None:
             st.info("No file selected. Please upload a .nii, .nii.gz or image file to enable analysis.")
 
-        if 'analyze' in locals() and analyze:
-            # Call backend MRI prediction endpoint
+        if analyze:
             with st.spinner("Uploading and analyzing MRI..."):
                 try:
                     url = "http://127.0.0.1:8000/epilepsy_diagnosis/mri/predict"
-                    # uploaded_file is a Streamlit UploadedFile
-                    files = {"file": (name, uploaded_file.getvalue(), uploaded_file.type)}
+                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
                     resp = requests.post(url, files=files, timeout=120)
 
                     if resp.status_code != 200:
@@ -132,10 +170,8 @@ def render():
                             st.image(img_bytes, caption="FCD overlay (backend)", use_column_width=True)
 
                         if stats:
-                            st.markdown("**Prediction stats**")
+                            st.markdown('<div class="asm-section-title">Prediction Stats</div>', unsafe_allow_html=True)
                             st.json(stats)
 
                 except Exception as e:
                     st.error(f"Failed to call backend: {e}")
-
-    st.markdown("</div>", unsafe_allow_html=True)
