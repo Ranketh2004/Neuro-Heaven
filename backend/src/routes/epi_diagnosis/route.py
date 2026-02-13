@@ -86,27 +86,18 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
 # POST /epilepsy_diagnosis/soz/predict
 # =========================
 @epi_router.post("/soz/predict")
-async def predict_soz(
-    request: Request,
-    file: UploadFile = File(...)
-) -> Dict[str, Any]:
+async def predict_soz(request: Request, file: UploadFile = File(...)) -> Dict[str, Any]:
     try:
         if not file.filename.lower().endswith(".edf"):
-            raise HTTPException(status_code=400, detail="Only EDF files are supported for SOZ.")
+            raise HTTPException(status_code=400, detail="Only EDF files are supported.")
 
-        content = await file.read()
-
-        # IMPORTANT: this service must be loaded in main.py startup:
-        # app.state.soz_service = SOZInferenceService(...)
         if not hasattr(request.app.state, "soz_service"):
-            raise HTTPException(
-                status_code=500,
-                detail="SOZ service not loaded. Check main.py startup load_models()."
-            )
+            raise HTTPException(status_code=500, detail="SOZ service not loaded. Check app startup.")
 
-        soz_service = request.app.state.soz_service
-        out = soz_service.predict_from_edf_bytes(
-            edf_bytes=content,
+        edf_bytes = await file.read()
+
+        out = request.app.state.soz_service.predict_from_edf_bytes(
+            edf_bytes=edf_bytes,
             filename=file.filename,
             tmin=0.0,
             window_sec=10.0,
@@ -120,8 +111,8 @@ async def predict_soz(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"SOZ prediction failed: {e}")
-        raise HTTPException(status_code=500, detail=f"SOZ prediction error: {str(e)}")
+        logger.exception("SOZ route failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @epi_router.get("/health")

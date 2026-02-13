@@ -1,7 +1,9 @@
-# backend/src/services/epi_diagnosis/soz_preprocessing.py
 import re
+from typing import List, Tuple, Optional
+
 import numpy as np
 import mne
+
 
 # ----------------------------
 # Channel helpers (same logic as training)
@@ -11,9 +13,11 @@ NON_BRAIN_PATTERNS = [
     r"^EOG", r"^TEMP", r"^MARK", r"^IBI"
 ]
 
+
 def is_non_brain(ch: str) -> bool:
     up = str(ch).upper()
     return any(re.search(pat, up) for pat in NON_BRAIN_PATTERNS)
+
 
 def norm_ref_name(ch: str) -> str:
     ch = str(ch).strip().upper()
@@ -23,17 +27,25 @@ def norm_ref_name(ch: str) -> str:
     ch = ch.replace(" ", "")
     return ch
 
-def parse_bipolar(label: str):
+
+def parse_bipolar(label: str) -> Tuple[str, Optional[str]]:
     s = str(label).strip().upper().replace(" ", "")
     if "-" in s:
         a, b = s.split("-", 1)
         return a, b
     return s, None
 
+
 # ----------------------------
-# Preprocess raw EDF (stable, lightweight)
+# Preprocess raw EDF (stable, training-aligned)
 # ----------------------------
-def preprocess_scalp(raw: mne.io.BaseRaw, notch_freqs=(60, 120), l_freq=0.5, h_freq=40.0, target_sfreq=250):
+def preprocess_scalp(
+    raw: mne.io.BaseRaw,
+    notch_freqs=(60, 120),
+    l_freq=0.5,
+    h_freq=40.0,
+    target_sfreq=250,
+) -> mne.io.BaseRaw:
     if not raw.preload:
         raw.load_data()
 
@@ -48,8 +60,9 @@ def preprocess_scalp(raw: mne.io.BaseRaw, notch_freqs=(60, 120), l_freq=0.5, h_f
 
     return raw
 
+
 # ----------------------------
-# Features (same as training)
+# Features (9 dims per node, same as training)
 # ----------------------------
 BANDS = {
     "delta": (1, 4),
@@ -58,6 +71,7 @@ BANDS = {
     "beta":  (13, 30),
     "gamma": (30, 40),
 }
+
 
 def hjorth_params(x: np.ndarray):
     x = np.asarray(x, dtype=np.float64)
@@ -70,9 +84,11 @@ def hjorth_params(x: np.ndarray):
     complexity = np.sqrt(var2 / var1) / (mobility + 1e-12)
     return float(mobility), float(complexity)
 
+
 def line_length(x: np.ndarray):
     x = np.asarray(x, dtype=np.float64)
     return float(np.mean(np.abs(np.diff(x))))
+
 
 def bandpower_log(sig: np.ndarray, sfreq: float, h_freq: float = 40.0):
     sig = np.nan_to_num(np.asarray(sig, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
@@ -87,7 +103,8 @@ def bandpower_log(sig: np.ndarray, sfreq: float, h_freq: float = 40.0):
         out.append(float(np.log10(m + 1e-12)))
     return out
 
-def node_features_from_signals(S: np.ndarray, sfreq: float, h_freq: float = 40.0):
+
+def node_features_from_signals(S: np.ndarray, sfreq: float, h_freq: float = 40.0) -> np.ndarray:
     feats = []
     for sig in S:
         sig = np.nan_to_num(sig, nan=0.0, posinf=0.0, neginf=0.0)
@@ -100,10 +117,16 @@ def node_features_from_signals(S: np.ndarray, sfreq: float, h_freq: float = 40.0
     X = np.asarray(feats, dtype=np.float32)
     return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
+
 # ----------------------------
-# Edges (same as training)
+# Edges (correlation top-k) WITH edge_attr for GATv2(edge_dim=1)
 # ----------------------------
-def corr_topk_edges(S: np.ndarray, top_k=8):
+def corr_topk_edges_with_attr(S: np.ndarray, top_k: int = 8):
+    """
+    Returns:
+      edge_index: np.ndarray shape [2, E] int64
+      edge_attr : np.ndarray shape [E, 1] float32
+    """
     S = np.nan_to_num(np.asarray(S, dtype=np.float64), nan=0.0, posinf=0.0, neginf=0.0)
     C = np.corrcoef(S)
     C = np.nan_to_num(C, nan=0.0, posinf=0.0, neginf=0.0)
@@ -117,21 +140,24 @@ def corr_topk_edges(S: np.ndarray, top_k=8):
             edges.append([i, j])
             weights.append(float(abs(C[i, j])))
 
+    # undirected
     edges_ud = edges + [[j, i] for (i, j) in edges]
     weights_ud = weights + weights
 
+    # self loops
     for i in range(n):
         edges_ud.append([i, i])
         weights_ud.append(1.0)
 
-    edge_index = np.array(edges_ud, dtype=np.int64).T
-    edge_weight = np.array(weights_ud, dtype=np.float32)
-    return edge_index, edge_weight
+    edge_index = np.array(edges_ud, dtype=np.int64).T  # [2, E]
+    edge_attr = np.array(weights_ud, dtype=np.float32).reshape(-1, 1)  # [E,1]
+    return edge_index, edge_attr
+
 
 # ----------------------------
 # Build node signals using TEMPLATE nodes (bipolar montage list)
 # ----------------------------
-def build_node_signals(raw_ref: mne.io.BaseRaw, node_labels: list[str]):
+def build_node_signals(raw_ref: mne.io.BaseRaw, node_labels: List[str]):
     ref_names = [norm_ref_name(c) for c in raw_ref.ch_names]
     idx_ref = {ref_names[i]: i for i in range(len(ref_names))}
     data_ref = raw_ref.get_data()
