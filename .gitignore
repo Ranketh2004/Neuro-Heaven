@@ -114,7 +114,6 @@ data/
 *.weights
 
 # Explicit model dirs
-models/
 artifacts/
 checkpoints/
 saved_models/

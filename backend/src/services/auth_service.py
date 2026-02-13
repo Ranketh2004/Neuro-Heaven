@@ -1,7 +1,8 @@
 """Authentication service with JWT and password management."""
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-import jwt
+from jose import jwt
+from jose.exceptions import JWTError, ExpiredSignatureError
 import hashlib
 from passlib.context import CryptContext
 from pymongo.database import Database
@@ -41,12 +42,22 @@ class AuthService:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using argon2 or bcrypt."""
-        return pwd_context.hash(password)
+        try:
+            return pwd_context.hash(password)
+        except Exception:
+            # If argon2 backend not available at runtime, fall back to bcrypt
+            fallback = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            return fallback.hash(password)
     
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         """Verify a plain password against its hashed version."""
-        return pwd_context.verify(plain_password, hashed_password)
+        try:
+            return pwd_context.verify(plain_password, hashed_password)
+        except Exception:
+            # Try bcrypt verification if argon2 backend is missing
+            fallback = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            return fallback.verify(plain_password, hashed_password)
     
     def create_access_token(self, user_id: str) -> str:
         """Create JWT access token for user."""
@@ -75,10 +86,10 @@ class AuthService:
             if user_id is None:
                 return None
             return user_id
-        except jwt.ExpiredSignatureError:
+        except ExpiredSignatureError:
             logger.warning("Token has expired")
             return None
-        except jwt.InvalidTokenError as e:
+        except JWTError as e:
             logger.warning(f"Invalid token: {e}")
             return None
     
