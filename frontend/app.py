@@ -456,13 +456,13 @@ if (not token) and (current_page not in PUBLIC_PAGES):
 
 # Build right-side auth HTML
 user = st.session_state.get("user") or {}
-user_email = user.get("email")
+user_name = user.get("full_name") or user.get("email")  # fallback to email if full_name not available
 
 right_html = ""
-if token and user_email:
+if token and user_name:
     right_html = f"""
 <div class="nh-right">
-<span class="nh-user">{user_email}</span>
+<span class="nh-user">{user_name}</span>
 <form method="get" style="display:inline;margin:0;">
 <input type="hidden" name="page" value="{current_page}">
 <input type="hidden" name="auth" value="logout">
