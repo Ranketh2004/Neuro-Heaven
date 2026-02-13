@@ -1,12 +1,9 @@
-# app.py
 import base64
 from pathlib import Path
-
 import streamlit as st
 
-from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization  
+from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page
 
-# ---------------- Paths / logo handling ----------------
 LOGO_PATH = Path("assets/logo.jpg")
 page_icon = str(LOGO_PATH) if LOGO_PATH.exists() else "🧠"
 
@@ -16,7 +13,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-# ---------------- Hide Streamlit default UI elements ----------------
+
+# Hide Streamlit default UI elements
 st.markdown(
     """
     <style>
@@ -29,7 +27,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Encode logo for header
+# Encode logo
 if LOGO_PATH.exists():
     logo_b64 = base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
     logo_tag = f'<img class="nh-logo" src="data:image/jpeg;base64,{logo_b64}" />'
@@ -41,7 +39,6 @@ else:
         'justify-content:center;font-weight:700;">NH</div>'
     )
 
-# ---------------- GLOBAL CSS ONLY ----------------
 CSS = """
 <style>
 .block-container {
@@ -424,22 +421,74 @@ header[data-testid="stHeader"] {
 </style>
 """
 
+
 st.markdown(CSS, unsafe_allow_html=True)
 
-# ---------------- Routing helpers ----------------
+# Routing helper
 page_param = st.query_params.get("page", ["home"])
 current_page = page_param[0] if isinstance(page_param, list) else page_param
 
-def nav_link(label: str, slug: str) -> str:
-    active_class = "active" if slug == current_page else ""
-    return f"""
-    <form method="get">
-        <input type="hidden" name="page" value="{slug}">
-        <button type="submit" class="nh-nav-link {active_class}">{label}</button>
-    </form>
-    """
+auth_action = st.query_params.get("auth", [None])
+auth_action = auth_action[0] if isinstance(auth_action, list) else auth_action
 
-# ---------------- NAVBAR HTML ----------------
+# Handle auth actions from navbar (signin/signup/logout)
+if auth_action in ("signin", "signup"):
+    auth_page.open(auth_action)
+    # remove auth param after consuming it
+    st.query_params.pop("auth", None)
+    st.rerun()
+
+if auth_action == "logout":
+    st.session_state.pop("token", None)
+    st.session_state.pop("user", None)
+    st.query_params.pop("auth", None)
+    st.rerun()
+
+# Auth guard
+PUBLIC_PAGES = {"home"}
+token = st.session_state.get("token")
+if (not token) and (current_page not in PUBLIC_PAGES):
+    st.session_state["pending_page"] = current_page
+    auth_page.open("signin")
+    # send them to home underneath (background)
+    st.query_params["page"] = "home"
+    current_page = "home"
+
+# Build right-side auth HTML
+user = st.session_state.get("user") or {}
+user_name = user.get("full_name") or user.get("email")  # fallback to email if full_name not available
+
+right_html = ""
+if token and user_name:
+    right_html = f"""
+<div class="nh-right">
+<span class="nh-user">{user_name}</span>
+<form method="get" style="display:inline;margin:0;">
+<input type="hidden" name="page" value="{current_page}">
+<input type="hidden" name="auth" value="logout">
+<button class="nh-btn" type="submit">Log out</button>
+</form>
+</div>
+"""
+    
+else:
+    # show Sign In / Sign Up on right corner
+    right_html = f"""
+<div class="nh-right">
+<form method="get" style="display:inline;margin:0;">
+<input type="hidden" name="page" value="{current_page}">
+<input type="hidden" name="auth" value="signin">
+<button class="nh-btn" type="submit">Sign In</button>
+</form>
+<form method="get" style="display:inline;margin:0;">
+<input type="hidden" name="page" value="{current_page}">
+<input type="hidden" name="auth" value="signup">
+<button class="nh-btn primary" type="submit">Sign Up</button>
+</form>
+</div>
+"""
+
+# NAVBAR HTML
 st.markdown(f"""
 <div class="nh-nav">
 <div class="nh-left">
@@ -451,7 +500,6 @@ st.markdown(f"""
 </div>
 
 <div class="nh-center-nav">
-
 <form method="get" style="display:inline;">
 <input type="hidden" name="page" value="home">
 <button class="nh-nav-link {'active' if current_page=='home' else ''}">Home</button>
@@ -475,18 +523,17 @@ st.markdown(f"""
 <form method="get" style="display:inline;">
 <input type="hidden" name="page" value="asm">
 <button class="nh-nav-link {'active' if current_page=='asm' else ''}">ASM Response</button>
-</form>
+</form></div>
 
-</div>
+{right_html}
 
-<!-- Mobile hamburger -->
 <a class="nh-hamburger" href="#nh-menu" aria-label="Open menu">
 <svg viewBox="0 0 24 24" aria-hidden="true">
 <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
 </svg>
 </a>
 </div>
-<!-- Mobile overlay menu -->
+
 <div id="nh-menu" class="nh-overlay">
 <div class="nh-overlay-inner">
 <div class="nh-overlay-top">
@@ -520,14 +567,20 @@ st.markdown(f"""
 <form method="get"><input type="hidden" name="page" value="asm">
 <button class="nh-overlay-link {'active' if current_page=='asm' else ''}">ASM Response</button>
 </form>
-</div>
-</div>
-</div>
 
+<form method="get"><input type="hidden" name="page" value="auth"><input type="hidden" name="tab" value="signin">
+<button class="nh-overlay-link {'active' if current_page=='auth' else ''}">Account</button>
+</form>
+</div>
+</div>
+</div>
 """, unsafe_allow_html=True)
 
+# REAL logout action (HTML can’t safely clear session_state)
+if st.session_state.get("auth_open"):
+    auth_page.render_dialog()
 
-# ---------------- ROUTE TO PAGES ----------------
+# ROUTES
 if current_page == "home":
     home.render()
 elif current_page == "asm":

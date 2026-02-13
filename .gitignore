@@ -1,0 +1,139 @@
+# Python core
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Packaging / build artifacts
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+pip-wheel-metadata/
+*.egg-info/
+*.egg
+.installed.cfg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.virtualenv/
+env.bak/
+venv.bak/
+
+# IDEs / Editors
+.vscode/
+.idea/
+.spyderproject
+.spyproject
+.ropeproject
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Logs / temp files
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Environment variables / secrets
+.env
+.env.*
+.env.local
+.env.*.local
+.streamlit/secrets.toml
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+pyrightconfig.json
+
+# ML / Data / Neuro files
+data/
+*.csv
+*.parquet
+*.zip
+
+# EEG / MRI / medical formats
+*.edf
+*.fif
+*.set
+*.nii
+*.nii.gz
+*.dcm
+
+# ML model artifacts
+*.h5
+*.pkl
+*.joblib
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.npz
+*.weights
+
+# Explicit model dirs
+artifacts/
+checkpoints/
+saved_models/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Documentation builds
+docs/_build/
+site/
+
+# PEP 582 / PDM / Poetry
+__pypackages__/
+.pdm.toml
+poetry.toml
+
+requirements.txt

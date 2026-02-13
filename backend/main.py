@@ -4,8 +4,10 @@ from pathlib import Path
 import logging
 
 from src.routes.epi_diagnosis import epi_router
+from src.routes.auth.route import router as auth_router
 from src.services.epi_diagnosis.soz_inference_service import SOZInferenceService
 from src.services.epi_diagnosis.mri_inference_service import MRIFCDInferenceService
+from src.config.database import MongoDatabase
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,7 +39,24 @@ app.include_router(
     prefix="/epilepsy_diagnosis",
     tags=["Epilepsy Diagnosis"]
 )
+app.include_router(
+    auth_router,
+    prefix="/auth",
+    tags=["Authentication"]
+)
+
+
 @app.on_event("startup")
+def startup_event():
+    """Initialize database connection on startup."""
+    try:
+        MongoDatabase.connect()
+        logger.info("Application startup: MongoDB connection established")
+    except Exception as e:
+        logger.warning(f"MongoDB connection failed on startup: {e}")
+        logger.info("App will continue, but auth endpoints will fail until DB connects")
+
+
 def load_soz_service():
     """
     Loads your GATv2 artifacts from:
@@ -73,6 +92,13 @@ def load_soz_service():
         logger.info("MRI FCD service loaded and ready.")
     except Exception as e:
         logger.error(f"Failed to load MRI service: {e}")
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    """Close database connection on shutdown."""
+    MongoDatabase.disconnect()
+    logger.info("Application shutdown: MongoDB connection closed")
 
 
 if __name__ == "__main__":
