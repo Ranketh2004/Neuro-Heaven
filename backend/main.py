@@ -45,6 +45,44 @@ app.include_router(
     tags=["Authentication"]
 )
 
+def load_soz_and_mri_services():
+    """
+    Expected folders:
+      backend/src/models/soz/   -> SOZ artifacts
+      backend/src/models/       -> MRI best.pt (or change path)
+    """
+   
+    base_models_dir = Path(__file__).resolve().parent / "src" / "models"
+
+    # -------- SOZ --------
+    soz_models_dir = base_models_dir / "soz"
+    logger.info(f"Loading SOZ service from: {soz_models_dir}")
+
+    try:
+        app.state.soz_service = SOZInferenceService(
+            models_dir=soz_models_dir,   
+            device="cpu"
+        )
+        logger.info("SOZ service loaded and ready.")
+    except ModuleNotFoundError as e:
+        logger.warning(f"SOZ optional dependency missing: {e}. SOZ endpoint will not work.")
+    except Exception as e:
+        logger.error(f"Failed to load SOZ service: {e}. SOZ endpoint will not work.")
+
+    # -------- MRI --------
+    try:
+        mri_model_path = base_models_dir / "best.pt"  # change if your filename differs
+        logger.info(f"Loading MRI FCD service from: {mri_model_path}")
+
+        app.state.mri_service = MRIFCDInferenceService(
+            model_pt_path=str(mri_model_path),
+            img_size=192,
+            base_ch=16,
+        )
+        logger.info("MRI FCD service loaded and ready.")
+    except Exception as e:
+        logger.error(f"Failed to load MRI service: {e}. MRI endpoint will not work.")
+
 
 @app.on_event("startup")
 def startup_event():
@@ -55,43 +93,9 @@ def startup_event():
     except Exception as e:
         logger.warning(f"MongoDB connection failed on startup: {e}")
         logger.info("App will continue, but auth endpoints will fail until DB connects")
+    load_soz_and_mri_services()
 
 
-def load_soz_service():
-    """
-    Loads your GATv2 artifacts from:
-      backend/src/models/
-        - GATv2_best_state_dict.pt
-        - META_graph_windows.csv
-        - config.joblib
-        - node_scaler.joblib
-    """
-    models_dir = Path(__file__).parent / "src" / "models"
-    logger.info(f"Loading SOZ service from: {models_dir}")
-
-    try:
-        app.state.soz_service = SOZInferenceService(
-            models_dir=models_dir,
-            device="cpu"
-        )
-        logger.info("SOZ service loaded and ready.")
-    except ModuleNotFoundError as e:
-        logger.warning(f"Optional dependency missing for SOZ service: {e}. Continuing without SOZ service.")
-    except Exception as e:
-        logger.error(f"Failed to load SOZ service: {e}. Continuing without SOZ service.")
-
-    # Load MRI FCD model/service
-    try:
-        mri_model_path = models_dir / "best.pt"
-        logger.info(f"Loading MRI FCD service from: {mri_model_path}")
-        app.state.mri_service = MRIFCDInferenceService(
-            model_pt_path=str(mri_model_path),
-            img_size=192,
-            base_ch=16,
-        )
-        logger.info("MRI FCD service loaded and ready.")
-    except Exception as e:
-        logger.error(f"Failed to load MRI service: {e}")
 
 
 @app.on_event("shutdown")
