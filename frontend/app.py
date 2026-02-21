@@ -1,8 +1,12 @@
 import base64
+import json
 from pathlib import Path
+
 import streamlit as st
+import extra_streamlit_components as stx
 
 from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page
+
 
 LOGO_PATH = Path("assets/logo.jpg")
 page_icon = str(LOGO_PATH) if LOGO_PATH.exists() else "🧠"
@@ -13,6 +17,74 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# ---------------------------
+# COOKIE-BASED AUTH PERSISTENCE
+# ---------------------------
+if "nh_cm_manager" not in st.session_state:
+    st.session_state["nh_cm_manager"] = stx.CookieManager(key="nh_cookie_manager_v5")
+
+cm = st.session_state["nh_cm_manager"]
+st.session_state["_nh_cm"] = cm  # keep for auth_page.py compatibility if you use it
+
+
+def _restore_auth_from_cookies():
+    # Don't override existing session auth
+    if st.session_state.get("token"):
+        return
+
+    try:
+        auth_cookie = cm.get("nh_auth")
+    except Exception:
+        # Component not ready yet
+        st.stop()
+
+    if not auth_cookie:
+        return
+
+    try:
+        auth = json.loads(auth_cookie) if isinstance(auth_cookie, str) else auth_cookie
+        token_cookie = auth.get("token")
+        user_obj = auth.get("user") or {}
+
+        if token_cookie:
+            st.session_state["token"] = token_cookie
+            st.session_state["user"] = user_obj
+            st.rerun()
+    except Exception:
+        # corrupted cookie / unexpected shape -> ignore
+        pass
+
+
+_restore_auth_from_cookies()
+
+# --------------------------------------------------
+# NAVIGATION STATE & ROUTING
+# --------------------------------------------------
+if "page" not in st.session_state:
+    st.session_state["page"] = st.query_params.get("page", "home")
+
+
+def go_to(page_key: str):
+    st.session_state["page"] = page_key
+    st.query_params["page"] = page_key
+    st.rerun()
+
+
+current_page = st.session_state["page"]
+
+# --------------------------------------------------
+# AUTH GUARD
+# --------------------------------------------------
+PUBLIC_PAGES = {"home"}
+token = st.session_state.get("token")
+
+if (not token) and (current_page not in PUBLIC_PAGES):
+    st.session_state["pending_page"] = current_page
+    auth_page.open("signin")
+    st.session_state["page"] = "home"
+    st.query_params["page"] = "home"
+    st.rerun()
 
 # Hide Streamlit default UI elements
 st.markdown(
@@ -39,6 +111,11 @@ else:
         'justify-content:center;font-weight:700;">NH</div>'
     )
 
+# --------------------------------------------------
+# CSS (merged: your current CSS + "previous navbar" styles)
+# NOTE: We keep your layout/hero css, and ADD the nav-link/auth button look
+# for Streamlit buttons so they visually match the old HTML navbar.
+# --------------------------------------------------
 CSS = """
 <style>
 .block-container {
@@ -46,12 +123,9 @@ CSS = """
     padding-left: 1rem;
     padding-right: 1rem;
 }
-header[data-testid="stHeader"] {
-    background: transparent;
-}
+header[data-testid="stHeader"] { background: transparent; }
 
-/* NAV ---------------------------------------------------------- */
-/* NAV ---------------------------------------------------------- */
+/* NAV BAR CONTAINER (same as old) */
 .nh-nav {
     display: flex;
     align-items: center;
@@ -88,7 +162,6 @@ header[data-testid="stHeader"] {
     letter-spacing: 0.02em;
     color: #1E3A5F;
 }
-
 .nh-brand-text-sub {
     font-weight: 800;
     font-size: 1.6rem;
@@ -96,7 +169,7 @@ header[data-testid="stHeader"] {
     margin-left: 0.15rem;
 }
 
-/* Desktop menu container */
+/* Center nav area */
 .nh-center-nav {
     display: flex;
     gap: 2.2rem;
@@ -108,109 +181,105 @@ header[data-testid="stHeader"] {
     flex: 1;
 }
 
-.nh-center-nav form {
-    margin: 0;
-    display: inline;
-}
-
-.nh-nav-link {
-    background: transparent;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-    position: relative;
-    padding-bottom: 0.1rem;
-    white-space: nowrap;
-}
-
-.nh-nav-link:hover { color: #1B2B3C; }
-
-.nh-nav-link.active {
-    color: #74B0D3 !important;
-    font-weight: 700;
-}
-
-/* MOBILE: hamburger */
-.nh-hamburger {
-    display: none;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0.4rem;
-    border-radius: 10px;
-}
-.nh-hamburger svg { width: 28px; height: 28px; fill: #1E3A5F; }
-.nh-hamburger:hover { background: rgba(116, 176, 211, 0.12); }
-
-/* Overlay menu (mobile) */
-.nh-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 16, 28, 0.92);
-    z-index: 9999;
-    display: none;
-}
-
-/* show overlay when targeted */
-.nh-overlay:target {
-    display: block;
-}
-
-.nh-overlay-inner {
-    height: 100%;
+/* Right auth area */
+.nh-right {
     display: flex;
-    flex-direction: column;
-}
-
-.nh-overlay-top {
-    display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 1.1rem 1.2rem;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    min-width: fit-content;
 }
-
-.nh-overlay-close {
-    font-size: 2rem;
-    line-height: 1;
-    text-decoration: none;
-    color: #ffffff;
-    opacity: 0.9;
-}
-.nh-overlay-close:hover { opacity: 1; }
-
-.nh-overlay-menu {
-    padding: 0.5rem 1.2rem 2rem 1.2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.2rem;
-}
-
-.nh-overlay-menu form { margin: 0; }
-
-.nh-overlay-link {
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: none;
-    color: #ffffff;
-    font-size: 1.4rem;
+.nh-user {
     font-weight: 600;
-    padding: 0.4rem 0;
-    cursor: pointer;
+    color: #1E3A5F;
+    margin-right: 0.25rem;
 }
 
-.nh-overlay-link.active {
-    color: #74B0D3;
+/* -----------------------------------------------------------------
+   IMPORTANT: Make Streamlit buttons LOOK like the old HTML navbar
+   ----------------------------------------------------------------- */
+
+   
+/* Base button reset for navbar buttons */
+.nh-nav-btn div.stButton > button,
+.auth-container div.stButton > button {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    font: inherit !important;
+    cursor: pointer !important;
+    text-transform: none !important;
 }
 
-/* Responsive switch */
-@media (max-width: 900px) {
-    .nh-center-nav { display: none; }
-    .nh-hamburger { display: inline-flex; }
+/* NAV links look */
+.nh-nav-btn div.stButton > button {
+    color: #ffffff !important;
+    font-weight: 500 !important;
+    font-size: 0.98rem !important;
+    white-space: nowrap !important;
+    padding-bottom: 0.1rem !important;
+}
+.nh-nav-btn div.stButton > button:hover { color: #1B2B3C !important; }
+
+/* Active nav (using Streamlit primary type) */
+.nh-nav-btn div.stButton > button[kind="primary"] {
+    color: #ffffff !important;
+    font-weight: 700 !important;
 }
 
+/* Auth buttons: mimic old .nh-btn primary/secondary pills */
+.auth-container div.stButton > button {
+    padding: 0.45rem 1rem !important;
+    border-radius: 999px !important;
+    font-size: 0.95rem !important;
+    line-height: 1 !important;
+}
+
+/* Signup (secondary) */
+.btn-signup div.stButton > button {
+    color: #4C5A6B !important;
+    font-weight: 600 !important;
+    margin-top: -1rem !important;
+}
+
+/* Login (primary gradient pill) */
+.btn-login div.stButton > button {
+    background: linear-gradient(90deg, #00C2FF 0%, #2D71FF 100%) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 8px 22px rgba(45,113,255,0.18) !important;
+    margin-top: -1rem !important;
+}
+
+/* Logout: match old simple button (not pill) */
+.btn-logout div.stButton > button {
+    color: #475569 !important;
+    font-weight: 600 !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 8px !important;
+}
+.btn-logout div.stButton > button:hover { opacity: 0.92 !important; }
+
+/* Remove extra vertical spacing Streamlit adds around buttons */
+.nh-nav-btn div.stButton { line-height: 1 !important; }
+.auth-container div.stButton { line-height: 1 !important; }
+
+/* Keep nav tight */
+div[data-testid="column"] > div:has(.nh-nav-btn) { padding-top: 0.15rem; }
+
+/* Optional: ensure button focus outline doesn't look ugly */
+.nh-nav-btn div.stButton > button:focus,
+.auth-container div.stButton > button:focus {
+    outline: none !important;
+}
+
+/* --------------------------------------------------
+   (Your existing HERO / sections CSS kept as-is)
+--------------------------------------------------- */
 
 /* HERO --------------------------------------------------------- */
 .nh-hero-wrapper {
@@ -222,12 +291,7 @@ header[data-testid="stHeader"] {
 .nh-hero {
     padding: 2.2rem 2.5rem 3.2rem 2.5rem;
     border-radius: 24px;
-    background: linear-gradient(
-        90deg,
-        #F4FBFF 0%,
-        #FFFFFF 50%,
-        #FFFFFF 100%
-    );
+    background: linear-gradient(90deg, #F4FBFF 0%, #FFFFFF 50%, #FFFFFF 100%);
     box-shadow: 0 18px 40px rgba(15, 52, 96, 0.06);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     text-align: center;
@@ -379,32 +443,6 @@ header[data-testid="stHeader"] {
     .nh-why-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
-.nh-benefit-card { text-align: center; }
-
-.nh-benefit-icon {
-    width: 96px;
-    height: 96px;
-    border-radius: 999px;
-    background: #F3F7FF;
-    margin: 0 auto 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.nh-benefit-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #1E3A5F;
-    margin-bottom: 0.75rem;
-}
-
-.nh-benefit-text {
-    font-size: 0.98rem;
-    color: #4B5563;
-    line-height: 1.7;
-}
-
 /* smaller screens */
 @media (max-width: 900px) {
     .nh-stats {
@@ -420,167 +458,104 @@ header[data-testid="stHeader"] {
 }
 </style>
 """
-
-
 st.markdown(CSS, unsafe_allow_html=True)
 
-# Routing helper
-page_param = st.query_params.get("page", ["home"])
-current_page = page_param[0] if isinstance(page_param, list) else page_param
+# --------------------------------------------------
+# NAVBAR (Streamlit button logic, now styled like old HTML navbar)
+# --------------------------------------------------
+t_logo, t_nav, t_auth = st.columns([2.2, 5.8, 2])
 
-auth_action = st.query_params.get("auth", [None])
-auth_action = auth_action[0] if isinstance(auth_action, list) else auth_action
+with t_logo:
+    st.markdown(
+        f"""
+        <div class="nh-left" style="padding-top:10px;">
+            {logo_tag}
+            <div style="display:flex;align-items:center;">
+                <span class="nh-brand-text-main">NEURO</span>
+                <span class="nh-brand-text-sub">HEAVEN</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# Handle auth actions from navbar (signin/signup/logout)
-if auth_action in ("signin", "signup"):
-    auth_page.open(auth_action)
-    # remove auth param after consuming it
-    st.query_params.pop("auth", None)
-    st.rerun()
+with t_nav:
+    st.markdown('<div class="nh-nav-btn">', unsafe_allow_html=True)
 
-if auth_action == "logout":
-    st.session_state.pop("token", None)
-    st.session_state.pop("user", None)
-    st.query_params.pop("auth", None)
-    st.rerun()
+    nav_cols = st.columns(5)
+    pages = [
+        ("Home", "home"),
+        ("EEG Diagnosis", "eeg"),
+        ("SOZ Localization", "soz"),
+        ("MRI Detection", "mri"),
+        ("ASM Response", "asm"),
+    ]
+    for i, (label, key) in enumerate(pages):
+        with nav_cols[i]:
+            if st.button(
+                label,
+                key=f"nav_{key}",
+                type="primary" if current_page == key else "secondary",
+                use_container_width=True,
+            ):
+                go_to(key)
 
-# Auth guard
-PUBLIC_PAGES = {"home"}
-token = st.session_state.get("token")
-if (not token) and (current_page not in PUBLIC_PAGES):
-    st.session_state["pending_page"] = current_page
-    auth_page.open("signin")
-    # send them to home underneath (background)
-    st.query_params["page"] = "home"
-    current_page = "home"
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Build right-side auth HTML
-user = st.session_state.get("user") or {}
-user_name = user.get("full_name") or user.get("email")  # fallback to email if full_name not available
+with t_auth:
+    st.markdown('<div class="auth-container">', unsafe_allow_html=True)
 
-right_html = ""
-if token and user_name:
-    right_html = f"""
-<div class="nh-right">
-<span class="nh-user">{user_name}</span>
-<form method="get" style="display:inline;margin:0;">
-<input type="hidden" name="page" value="{current_page}">
-<input type="hidden" name="auth" value="logout">
-<button class="nh-btn" type="submit">Log out</button>
-</form>
-</div>
-"""
-    
-else:
-    # show Sign In / Sign Up on right corner
-    right_html = f"""
-<div class="nh-right">
-<form method="get" style="display:inline;margin:0;">
-<input type="hidden" name="page" value="{current_page}">
-<input type="hidden" name="auth" value="signin">
-<button class="nh-btn" type="submit">Sign In</button>
-</form>
-<form method="get" style="display:inline;margin:0;">
-<input type="hidden" name="page" value="{current_page}">
-<input type="hidden" name="auth" value="signup">
-<button class="nh-btn primary" type="submit">Sign Up</button>
-</form>
-</div>
-"""
+    user = st.session_state.get("user") or {}
+    user_name = user.get("full_name") or user.get("email")
+    token = st.session_state.get("token")
 
-# NAVBAR HTML
-st.markdown(f"""
-<div class="nh-nav">
-<div class="nh-left">
-{logo_tag}
-<div style="display:flex;align-items:center;">
-<span class="nh-brand-text-main">NEURO</span>
-<span class="nh-brand-text-sub">HEAVEN</span>
-</div>
-</div>
+    if token and user_name:
+        a_col1, a_col2 = st.columns([2, 1])
+        a_col1.markdown(
+            f"<div style='margin-top:10px; font-weight:600; color:#1E3A5F;'>👤 {user_name}</div>",
+            unsafe_allow_html=True,
+        )
+        with a_col2:
+            st.markdown('<div class="btn-logout">', unsafe_allow_html=True)
+            if st.button("Log out", key="logout_btn"):
+                st.session_state.pop("token", None)
+                st.session_state.pop("user", None)
+                try:
+                    cm.delete("nh_auth")
+                except Exception:
+                    pass
+                go_to("home")
+            st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        a_col1, a_col2 = st.columns(2)
+        with a_col1:
+            st.markdown('<div class="btn-signup">', unsafe_allow_html=True)
+            if st.button("Sign Up", key="signup_click"):
+                auth_page.open("signup")
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        with a_col2:
+            st.markdown('<div class="btn-login">', unsafe_allow_html=True)
+            if st.button("Log In", key="login_click"):
+                auth_page.open("signin")
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
-<div class="nh-center-nav">
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="home">
-<button class="nh-nav-link {'active' if current_page=='home' else ''}">Home</button>
-</form>
+    st.markdown("</div>", unsafe_allow_html=True)
 
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="eeg">
-<button class="nh-nav-link {'active' if current_page=='eeg' else ''}">EEG Diagnosis</button>
-</form>
+st.markdown("<hr style='margin-top:0; margin-bottom:1rem; opacity:0.1;'>", unsafe_allow_html=True)
 
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="soz">
-<button class="nh-nav-link {'active' if current_page=='soz' else ''}">SOZ Localization</button>
-</form>
-
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="mri">
-<button class="nh-nav-link {'active' if current_page=='mri' else ''}">MRI Detection</button>
-</form>
-
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="asm">
-<button class="nh-nav-link {'active' if current_page=='asm' else ''}">ASM Response</button>
-</form></div>
-
-{right_html}
-
-<a class="nh-hamburger" href="#nh-menu" aria-label="Open menu">
-<svg viewBox="0 0 24 24" aria-hidden="true">
-<path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-</svg>
-</a>
-</div>
-
-<div id="nh-menu" class="nh-overlay">
-<div class="nh-overlay-inner">
-<div class="nh-overlay-top">
-<div style="display:flex;align-items:center;gap:0.6rem;">
-{logo_tag}
-<div style="display:flex;align-items:center;">
-<span class="nh-brand-text-main" style="color:#fff;">NEURO</span>
-<span class="nh-brand-text-sub">HEAVEN</span>
-</div>
-</div>
-<a href="#" class="nh-overlay-close" aria-label="Close menu">&times;</a>
-</div>
-
-<div class="nh-overlay-menu">
-<form method="get"><input type="hidden" name="page" value="home">
-<button class="nh-overlay-link {'active' if current_page=='home' else ''}">Home</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="eeg">
-<button class="nh-overlay-link {'active' if current_page=='eeg' else ''}">EEG Diagnosis</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="soz">
-<button class="nh-overlay-link {'active' if current_page=='soz' else ''}">SOZ Localization</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="mri">
-<button class="nh-overlay-link {'active' if current_page=='mri' else ''}">MRI Detection</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="asm">
-<button class="nh-overlay-link {'active' if current_page=='asm' else ''}">ASM Response</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="auth"><input type="hidden" name="tab" value="signin">
-<button class="nh-overlay-link {'active' if current_page=='auth' else ''}">Account</button>
-</form>
-</div>
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-# REAL logout action (HTML can’t safely clear session_state)
+# --------------------------------------------------
+# AUTH DIALOG
+# --------------------------------------------------
 if st.session_state.get("auth_open"):
     auth_page.render_dialog()
 
-# ROUTES
+# --------------------------------------------------
+# ROUTE RENDERING
+# --------------------------------------------------
+current_page = st.session_state.get("page", "home")
+
 if current_page == "home":
     home.render()
 elif current_page == "asm":

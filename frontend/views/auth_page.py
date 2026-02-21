@@ -1,5 +1,13 @@
+import json
+from datetime import datetime, timedelta, timezone
+
 import streamlit as st
 from utils.api_client import post, get, APIError
+
+
+def _switch_mode(mode: str):
+    st.session_state["auth_mode"] = mode
+    st.rerun()
 
 def _set_page(slug: str):
     st.query_params["page"] = slug
@@ -12,14 +20,37 @@ def open(mode: str = "signin"):
 def close():
     st.session_state["auth_open"] = False
 
+
+def _persist_auth_to_cookies(remember: bool):
+    """
+    Reuse CookieManager created in app.py to avoid StreamlitDuplicateElementKey.
+    app.py must set: st.session_state["_nh_cm"] = stx.CookieManager(key="nh_cookie_manager")
+    """
+    cm = st.session_state.get("_nh_cm")
+    if cm is None:
+        # If you see this, you didn't initialize CookieManager in app.py
+        st.error("CookieManager not initialized. Initialize it once in app.py.")
+        return
+
+    token = st.session_state.get("token")
+    user = st.session_state.get("user", {})
+
+    if not token:
+        return
+
+    # 7 days if remember, else short-lived (2 hours). Change if you want.
+    expires = datetime.now(timezone.utc) + (timedelta(days=7) if remember else timedelta(hours=2))
+
+    # Store both token and user in a single cookie to avoid duplicate CookieManager elements
+    auth_payload = json.dumps({"token": token, "user": user})
+    cm.set("nh_auth", auth_payload, expires_at=expires)
+
+
 @st.dialog(" ", width="small")
 def render_dialog():
     st.markdown(
         r"""
         <style>
-        /* -----------------------------
-           1) REMOVE STREAMLIT HEADER BAR
-        ------------------------------*/
         [data-testid="stDialogHeader"]{
             display:none !important;
             height:0 !important;
@@ -27,7 +58,6 @@ def render_dialog():
             margin:0 !important;
         }
 
-        /* Some Streamlit builds also show a native close icon button */
         [data-testid="stDialog"] button[aria-label="Close"],
         [data-testid="stDialog"] button[title="Close"],
         [data-testid="stDialog"] button[aria-label="close"],
@@ -36,7 +66,6 @@ def render_dialog():
             visibility:hidden !important;
         }
 
-        /* Make the dialog background transparent; we draw our own card */
         div[data-testid="stDialog"] > div{
             background: transparent !important;
             border: none !important;
@@ -45,9 +74,6 @@ def render_dialog():
             margin: 0 !important;
         }
 
-        /* -----------------------------
-           2) CENTER WRAPPER + CARD
-        ------------------------------*/
         .auth-wrap{
             width: 100%;
             display:flex;
@@ -66,10 +92,6 @@ def render_dialog():
             position: relative;
         }
 
-        /* -----------------------------
-           3) CLOSE BUTTON TOP-RIGHT
-        ------------------------------*/
-        
         .auth-card div[data-testid="stButton"]:first-of-type button{
             position:absolute !important;
             top: 14px;
@@ -91,9 +113,6 @@ def render_dialog():
             color:#64748b !important;
         }
 
-        /* -----------------------------
-           4) TITLE + SUBTITLE (CENTERED)
-        ------------------------------*/
         .auth-title{
             text-align:center;
             font-size: 34px;
@@ -108,10 +127,6 @@ def render_dialog():
             margin: 0 0 18px 0;
         }
 
-        /* -----------------------------
-           5) INPUTS WITH ICONS
-        ------------------------------*/
-        /* Hide ONLY text input label, keep checkbox label */
         .auth-card div[data-testid="stTextInput"] label{
             display:none !important;
         }
@@ -120,8 +135,8 @@ def render_dialog():
             border-radius: 12px !important;
             border: 1px solid rgba(203,213,225,0.95) !important;
             padding: 12px 14px !important;
-            padding-left: 46px !important;     /* room for left icon */
-            padding-right: 46px !important;    /* room for eye icon */
+            padding-left: 46px !important;
+            padding-right: 46px !important;
             font-size: 16px !important;
             background:#ffffff !important;
         }
@@ -131,7 +146,6 @@ def render_dialog():
             outline: none !important;
         }
 
-        /* Email icon */
         .auth-card input[aria-label="Email"]{
             background-repeat:no-repeat !important;
             background-position: 14px 50% !important;
@@ -142,7 +156,6 @@ def render_dialog():
 </svg>");
         }
 
-        /* Lock icon for Password */
         .auth-card input[aria-label="Password"]{
             background-repeat:no-repeat !important;
             background-position: 14px 50% !important;
@@ -153,18 +166,15 @@ def render_dialog():
 </svg>");
         }
 
-        /* Tighter widget spacing like screenshot */
         .auth-card .stTextInput{ margin-top: 12px !important; margin-bottom: 0 !important; }
         .auth-card .stCheckbox{ margin-top: 10px !important; margin-bottom: 0 !important; }
 
-        /* Checkbox label visible */
         .auth-card div[data-testid="stCheckbox"] label{
             font-size: 15px !important;
             color:#475569 !important;
             font-weight: 500 !important;
         }
 
-        /* Remember + forgot row */
         .auth-row-right{
             text-align:right;
             padding-top: 10px;
@@ -176,10 +186,6 @@ def render_dialog():
         }
         .auth-row-right a:hover{ text-decoration:underline; }
 
-        /* -----------------------------
-           6) PRIMARY BUTTON FULL WIDTH
-        ------------------------------*/
-        /* First primary action button after close button */
         .auth-card div[data-testid="stButton"]:not(:first-of-type) button[kind="primary"]{
             width:100% !important;
             border-radius: 12px !important;
@@ -194,9 +200,6 @@ def render_dialog():
             background:#0272aa !important;
         }
 
-        /* -----------------------------
-           7) DIVIDER + SOCIAL BUTTONS
-        ------------------------------*/
         .auth-divider{
             display:flex;
             align-items:center;
@@ -215,9 +218,13 @@ def render_dialog():
         .auth-social{
             display:flex;
             gap:14px;
+            justify-content:center;
         }
         .auth-social a{
-            flex:1;
+            flex: none;
+            width: 360px;
+            max-width: 35%;
+            margin: 0 auto;
             display:flex;
             align-items:center;
             justify-content:center;
@@ -232,7 +239,6 @@ def render_dialog():
         }
         .auth-social a:hover{ background:#f8fafc; }
 
-        /* style ONLY our close button */
         button[kind="secondary"]{
             width: 36px !important;
             height: 36px !important;
@@ -250,7 +256,6 @@ def render_dialog():
             background:#f8fafc !important;
             color:#64748b !important;
         }
-
         </style>
         """,
         unsafe_allow_html=True,
@@ -286,11 +291,18 @@ def render_dialog():
             try:
                 data = post("/auth/login", {"email": email, "password": password})
                 st.session_state["token"] = data["access_token"]
+
                 me = get("/auth/me", token=st.session_state["token"])
                 st.session_state["user"] = me
+
+                # ✅ save cookies here
+                _persist_auth_to_cookies(remember=remember)
+                st.session_state["_just_logged_in"] = True
+
                 target = st.session_state.pop("pending_page", "home")
                 close()
                 _set_page(target)
+
             except APIError as e:
                 st.error(str(e))
 
@@ -302,12 +314,16 @@ def render_dialog():
                     <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" width="18" height="18">
                     Google
                 </a>
-                <a href="#" onclick="return false;">
-                    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="18" height="18">
-                    GitHub
-                </a>
             </div>
             """,
+            unsafe_allow_html=True,
+        )
+
+        page = st.query_params.get("page", ["home"])
+        page = page[0] if isinstance(page, list) else page
+        signup_href = f'?page={page}&auth=signup'
+        st.markdown(
+            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Don't have an account? <a href=\"{signup_href}\" target=\"_self\" onclick=\"window.location.href='{signup_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign up</a></div>",
             unsafe_allow_html=True,
         )
 
@@ -344,12 +360,16 @@ def render_dialog():
                     <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" width="18" height="18">
                     Google
                 </a>
-                <a href="#" onclick="return false;">
-                    <img src="https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png" width="18" height="18">
-                    GitHub
-                </a>
             </div>
             """,
+            unsafe_allow_html=True,
+        )
+
+        page = st.query_params.get("page", ["home"])
+        page = page[0] if isinstance(page, list) else page
+        signin_href = f'?page={page}&auth=signin'
+        st.markdown(
+            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Already have an account? <a href=\"{signin_href}\" target=\"_self\" onclick=\"window.location.href='{signin_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign in</a></div>",
             unsafe_allow_html=True,
         )
 
