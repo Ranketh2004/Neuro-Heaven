@@ -43,6 +43,17 @@ class UserLogin(BaseModel):
     password: str
 
 
+class GoogleLoginRequest(BaseModel):
+    """Google OAuth login request schema."""
+    email: EmailStr
+    name: str = Field(..., alias="full_name")
+    picture: Optional[str] = None
+    google_id: str
+    
+    class Config:
+        populate_by_name = True
+
+
 class UserResponse(UserBase):
     """User response schema (no password)."""
     id: Optional[str] = Field(alias="_id")

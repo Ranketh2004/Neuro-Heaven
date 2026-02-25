@@ -5,7 +5,7 @@ from typing import Optional
 import logging
 
 from src.config.database import get_database
-from src.models.user import UserCreate, UserLogin, TokenResponse, UserResponse
+from src.models.user import UserCreate, UserLogin, TokenResponse, UserResponse, GoogleLoginRequest
 from src.services.auth_service import AuthService
 
 logger = logging.getLogger(__name__)
@@ -76,6 +76,35 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred during login"
+        )
+
+
+@router.post("/google-login", response_model=TokenResponse)
+def google_login(
+    auth_data: GoogleLoginRequest,
+    auth_service: AuthService = Depends(get_auth_service)
+) -> dict:
+    """
+    Login or register user via Google OAuth.
+    
+    - **email**: User's email address
+    - **full_name**: User's full name from Google profile
+    - **picture**: User's profile picture URL (optional)
+    - **google_id**: User's Google ID
+    """
+    try:
+        result = auth_service.google_login(
+            email=auth_data.email,
+            full_name=auth_data.name,
+            picture=auth_data.picture,
+            google_id=auth_data.google_id
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Google login error: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred during Google login"
         )
 
 
