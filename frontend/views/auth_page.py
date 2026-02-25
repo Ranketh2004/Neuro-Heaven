@@ -1,8 +1,10 @@
 import json
 from datetime import datetime, timedelta, timezone
+import os
 
 import streamlit as st
 from utils.api_client import post, get, APIError
+from utils.google_oauth import GoogleOAuth
 
 
 def _switch_mode(mode: str):
@@ -19,6 +21,56 @@ def open(mode: str = "signin"):
 
 def close():
     st.session_state["auth_open"] = False
+
+
+def _handle_google_callback():
+    """
+    Handle Google OAuth callback when code is present in query params
+    """
+    code = st.query_params.get("code")
+    if code:
+        google_oauth = GoogleOAuth()
+        result = google_oauth.handle_callback(code if isinstance(code, str) else code[0])
+        
+        if result["success"] and result["user"]:
+            user_info = result["user"]
+            try:
+                # Send user info to backend for registration/login
+                data = post("/auth/google-login", {
+                    "email": user_info["email"],
+                    "name": user_info["name"],
+                    "picture": user_info["picture"],
+                    "google_id": user_info["google_id"]
+                })
+                
+                st.session_state["token"] = data["access_token"]
+                
+                me = get("/auth/me", token=st.session_state["token"])
+                st.session_state["user"] = me
+                
+                # Persist auth to cookies
+                expires = datetime.now(timezone.utc) + timedelta(days=7)
+                cm = st.session_state.get("_nh_cm")
+                if cm:
+                    auth_payload = json.dumps({"token": st.session_state["token"], "user": me})
+                    cm.set("nh_auth", auth_payload, expires_at=expires)
+                
+                st.session_state["_just_logged_in"] = True
+                
+                # Clean up query params
+                st.query_params.clear()
+                
+                target = st.session_state.pop("pending_page", "home")
+                close()
+                _set_page(target)
+                
+            except APIError as e:
+                st.error(f"Failed to login with Google: {str(e)}")
+                # Clean up the code from query params
+                st.query_params.clear()
+        else:
+            st.error(f"Google authentication failed: {result.get('error', 'Unknown error')}")
+            st.query_params.clear()
 
 
 def _persist_auth_to_cookies(remember: bool):
@@ -48,6 +100,9 @@ def _persist_auth_to_cookies(remember: bool):
 
 @st.dialog(" ", width="small")
 def render_dialog():
+    # Handle Google OAuth callback
+    _handle_google_callback()
+    
     st.markdown(
         r"""
         <style>
@@ -307,10 +362,15 @@ def render_dialog():
                 st.error(str(e))
 
         st.markdown('<div class="auth-divider">Or continue with</div>', unsafe_allow_html=True)
+        
+        # Google OAuth button for sign in
+        google_oauth = GoogleOAuth()
+        google_auth_url = google_oauth.get_authorization_url()
+        
         st.markdown(
-            """
+            f"""
             <div class="auth-social">
-                <a href="#" onclick="return false;">
+                <a href="{google_auth_url}" target="_self">
                     <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" width="18" height="18">
                     Google
                 </a>
@@ -353,10 +413,15 @@ def render_dialog():
                     st.error(str(e))
 
         st.markdown('<div class="auth-divider">Or continue with</div>', unsafe_allow_html=True)
+        
+        # Google OAuth button for sign up
+        google_oauth = GoogleOAuth()
+        google_auth_url = google_oauth.get_authorization_url()
+        
         st.markdown(
-            """
+            f"""
             <div class="auth-social">
-                <a href="#" onclick="return false;">
+                <a href="{google_auth_url}" target="_self">
                     <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" width="18" height="18">
                     Google
                 </a>

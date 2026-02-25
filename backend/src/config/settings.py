@@ -20,10 +20,16 @@ class Settings(BaseSettings):
     # API Configuration
     API_PREFIX: str = "/api/v1"
     
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI")
+    
     class Config:
         # Load .env from parent directory (Neuro-Heaven root)
         env_file = str(Path(__file__).parent.parent.parent.parent / ".env")
         case_sensitive = True
+        extra = "ignore"  # Allow extra fields in .env but don't require them
 
 
 settings = Settings()
