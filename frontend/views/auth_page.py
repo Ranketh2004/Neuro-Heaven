@@ -22,57 +22,6 @@ def open(mode: str = "signin"):
 def close():
     st.session_state["auth_open"] = False
 
-
-def _handle_google_callback():
-    """
-    Handle Google OAuth callback when code is present in query params
-    """
-    code = st.query_params.get("code")
-    if code:
-        google_oauth = GoogleOAuth()
-        result = google_oauth.handle_callback(code if isinstance(code, str) else code[0])
-        
-        if result["success"] and result["user"]:
-            user_info = result["user"]
-            try:
-                # Send user info to backend for registration/login
-                data = post("/auth/google-login", {
-                    "email": user_info["email"],
-                    "name": user_info["name"],
-                    "picture": user_info["picture"],
-                    "google_id": user_info["google_id"]
-                })
-                
-                st.session_state["token"] = data["access_token"]
-                
-                me = get("/auth/me", token=st.session_state["token"])
-                st.session_state["user"] = me
-                
-                # Persist auth to cookies
-                expires = datetime.now(timezone.utc) + timedelta(days=7)
-                cm = st.session_state.get("_nh_cm")
-                if cm:
-                    auth_payload = json.dumps({"token": st.session_state["token"], "user": me})
-                    cm.set("nh_auth", auth_payload, expires_at=expires)
-                
-                st.session_state["_just_logged_in"] = True
-                
-                # Clean up query params
-                st.query_params.clear()
-                
-                target = st.session_state.pop("pending_page", "home")
-                close()
-                _set_page(target)
-                
-            except APIError as e:
-                st.error(f"Failed to login with Google: {str(e)}")
-                # Clean up the code from query params
-                st.query_params.clear()
-        else:
-            st.error(f"Google authentication failed: {result.get('error', 'Unknown error')}")
-            st.query_params.clear()
-
-
 def _persist_auth_to_cookies(remember: bool):
     """
     Reuse CookieManager created in app.py to avoid StreamlitDuplicateElementKey.
@@ -101,7 +50,7 @@ def _persist_auth_to_cookies(remember: bool):
 @st.dialog(" ", width="small")
 def render_dialog():
     # Handle Google OAuth callback
-    _handle_google_callback()
+    # _handle_google_callback()
     
     st.markdown(
         r"""
@@ -356,7 +305,7 @@ def render_dialog():
 
                 target = st.session_state.pop("pending_page", "home")
                 close()
-                _set_page(target)
+                st.rerun()
 
             except APIError as e:
                 st.error(str(e))

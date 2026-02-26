@@ -5,6 +5,9 @@ from pathlib import Path
 import streamlit as st
 import extra_streamlit_components as stx
 
+from utils.google_oauth import GoogleOAuth
+from utils.api_client import post, get
+
 from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page
 
 
@@ -17,6 +20,44 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+def handle_google_callback():
+    code = st.query_params.get("code")
+    if not code:
+        return
+
+    google_oauth = GoogleOAuth()
+
+    result = google_oauth.handle_callback(
+        code if isinstance(code, str) else code[0]
+    )
+
+    if result["success"] and result["user"]:
+        user_info = result["user"]
+
+        data = post("/auth/google-login", {
+            "email": user_info["email"],
+            "name": user_info["name"],
+            "picture": user_info["picture"],
+            "google_id": user_info["google_id"]
+        })
+
+        st.session_state["token"] = data["access_token"]
+        st.session_state["user"] = get(
+            "/auth/me",
+            token=st.session_state["token"]
+        )
+
+        # Clear URL params so it doesn’t re-trigger
+        st.query_params.clear()
+
+        st.rerun()
+
+    else:
+        st.query_params.clear()
+        st.error("Google authentication failed.")
+
+handle_google_callback()
 
 # ---------------------------
 # COOKIE-BASED AUTH PERSISTENCE
