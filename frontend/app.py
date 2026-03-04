@@ -153,8 +153,6 @@ if token:
     ls_set("nh_token", token)
     ls_set("nh_user", json.dumps(user or {}))
 
-
-# AUTH GUARD
 PROTECTED_PAGES = {"eeg", "soz", "mri", "asm"}
 if (not token) and (current_page in PROTECTED_PAGES):
     st.session_state["pending_page"] = current_page
@@ -344,12 +342,12 @@ section[data-testid="stSidebar"] [data-testid="stMarkdown"] {{
   margin-bottom: 0 !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
-  gap: 0.65rem !important;
+  gap: 0.50rem !important;
 }}
 
 /* Logout button - last button in sidebar */
 section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type {{
-  margin-top: -66px !important;
+  margin-top: -60px !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button {{
   width: 100% !important;
@@ -375,15 +373,35 @@ section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button::b
   flex-shrink: 0 !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button:hover {{
-  background: transparent !important;
+  background: rgba(255,255,255,0.16) !important;
 }}
 .sb-user {{ 
-    margin-bottom: 3rem !important; 
+    margin-bottom: 4rem !important; 
 }}
 .logout-wrap {{ 
     margin-top: 0 !important; 
     padding-left: 0 !important;
     padding-right: 0 !important;
+}}
+section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button{{
+  width: 100% !important;
+  height: 34px !important;   /* reduced */
+  border-radius: 10px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  background: rgba(255,255,255,0.12) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  padding: 0.2rem 0.2rem !important;  /* reduced */
+  font-size: 0.85rem !important;
+}}
+
+section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button:hover{{
+  background: transparent !important;
+  border-color: transparent !important;
+  transform: none !important;
 }}
 
 /* HERO --------------------------------------------------------- */
@@ -546,10 +564,10 @@ section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button:ho
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem 2rem;
+    padding: 0rem 0rem;
     background: #fff;
     border-bottom: 4px solid #20A0D8;
-    margin: 0 -1rem 6rem -1rem; !important;
+    margin: 0 -1rem 4rem -1rem; !important;
     width: calc(100% + 2rem);
     box-shadow: 0 6px 24px rgba(14, 92, 122, 0.12);
 }}
@@ -699,14 +717,10 @@ if token:
         )
 
         st.markdown('<div class="logout-wrap">', unsafe_allow_html=True)
-        if st.button("Log out", key="logout_btn", use_container_width=True):
+        if st.button("Log out", key="logout_btn", use_container_width=False):
             do_logout()
         st.markdown("</div>", unsafe_allow_html=True)
 
-
-# --------------------------------------------------
-# AUTH DIALOG
-# --------------------------------------------------
 if st.session_state.get("auth_open"):
     auth_page.render_dialog()
     if st.session_state.get("token"):
@@ -714,10 +728,6 @@ if st.session_state.get("auth_open"):
         ls_set("nh_token", st.session_state["token"])
         ls_set("nh_user", json.dumps(st.session_state.get("user") or {}))
 
-
-# --------------------------------------------------
-# NAVBAR (for logged-out users)
-# --------------------------------------------------
 if not token:
     logo_tag = f'<img class="nh-navbar-logo" src="{logo_img_src}" />' if logo_img_src else ''
     
@@ -748,7 +758,6 @@ if not token:
                 auth_page.open("signup")
                 st.rerun()
 
-# ROUTE RENDERING
 current_page = st.session_state.get("page", "home")
 
 if current_page == "home":
