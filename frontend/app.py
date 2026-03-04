@@ -679,10 +679,10 @@ if token:
 
         nav_items = [
             ("home", "home", "Home", "Overview"),
-            ("soz", "pulse", "SOZ Localization", "EEG Graph Analysis"),
-            ("asm", "pill", "ASM Predictor", "Treatment Response"),
-            ("mri", "scan", "MRI Detection", "Lesion Analysis"),
             ("eeg", "brain", "EEG Diagnosis", "Case-Based Reasoning"),
+            ("soz", "pulse", "SOZ Localization", "EEG Graph Analysis"),
+            ("mri", "scan", "MRI Detection", "Lesion Analysis"),
+            ("asm", "pill", "ASM Predictor", "Treatment Response"),  
         ]
 
         st.markdown('<div class="nav-shell">', unsafe_allow_html=True)
@@ -762,13 +762,13 @@ current_page = st.session_state.get("page", "home")
 
 if current_page == "home":
     home.render()
-elif current_page == "asm":
-    asm_response.render()
 elif current_page == "eeg":
     eeg_diagnosis.render()
 elif current_page == "soz":
     soz_localization.render()
 elif current_page == "mri":
     mri_detection.render()
+elif current_page == "asm":
+    asm_response.render()
 else:
     home.render()
