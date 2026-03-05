@@ -18,7 +18,7 @@ st.set_page_config(
     page_title="NeuroHeaven",
     page_icon=page_icon,
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 def handle_google_callback():
@@ -178,16 +178,9 @@ def _svg(icon_name: str) -> str:
 
 CSS = f"""
 <style>
-#MainMenu {{visibility: hidden;}}
+MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 header[data-testid="stHeader"] {{ display: none !important; }}
-
-/* Add top padding to push navbar and content down */
-.stMainBlockContainer {{ padding-top: 1.25rem !important; }}
-[data-testid="stAppViewBlockContainer"] {{ padding-top: 1.5rem !important; }}
-[data-testid="block-container"] {{ padding-top: 1.5rem !important; }}
-.stApp > header + div {{ padding-top: 1.5rem !important; }}
-.main .block-container {{ padding-top: 1.5rem !important; }}
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !important; }}
 {"section[data-testid='stSidebar']{display:block !important;}" if token else "section[data-testid='stSidebar']{display:none !important;}"}
@@ -682,7 +675,7 @@ if token:
             ("eeg", "brain", "EEG Diagnosis", "Case-Based Reasoning"),
             ("soz", "pulse", "SOZ Localization", "EEG Graph Analysis"),
             ("mri", "scan", "MRI Detection", "Lesion Analysis"),
-            ("asm", "pill", "ASM Predictor", "Treatment Response"),  
+            ("asm", "pill", "ASM Predictor", "Treatment Response"),
         ]
 
         st.markdown('<div class="nav-shell">', unsafe_allow_html=True)

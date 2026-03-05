@@ -131,6 +131,13 @@ def render():
     st.markdown(
         dedent("""
         <style>
+        .block-container{
+            padding-top:0rem !important;
+        }
+
+        section.main > div{
+            padding-top:0rem !important;
+        }
           .asm-title { font-size: 2.5rem; font-weight: 800; color:#1E3A5F; }
           .asm-subtitle { color:#49576B; margin-top:-0.4rem; }
           .asm-section-title { font-size: 1.25rem; font-weight: 800; color:#1E3A5F; margin-bottom:0.25rem; }
@@ -176,7 +183,7 @@ def render():
         unsafe_allow_html=True,
     )
 
-    left, mid, right = st.columns([2, 28, 2], vertical_alignment="top")
+    left, mid, right = st.columns([1, 40, 1], vertical_alignment="top")
 
     with mid:
         st.markdown(
@@ -358,7 +365,7 @@ def render():
                     padding: 18px 18px;
                     background: linear-gradient(180deg,#ffffff 0%, #fbfdff 100%);
                     box-shadow: 0 10px 26px rgba(15,23,42,0.08);
-                    margin-top: 14px;
+                    margin-top: 0px !important;
                     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
                   }}
                   .nh-header{{
