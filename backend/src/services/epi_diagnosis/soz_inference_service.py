@@ -7,6 +7,8 @@ import tempfile
 import os
 import ast
 import time
+import io
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +116,104 @@ class SOZInferenceService:
         self.model = model.to(self.device)
 
         logger.info(f"[SOZ] Loaded GraphSAGE on {self.device}: in_dim={in_dim}, hid={hid}, drop={drop}")
+
+    # ----------------------------------------------------------------
+    # Topomap generation helpers
+    # ----------------------------------------------------------------
+    # Standard 10-20 electrode positions (x, y) in head-circle coords.
+    # x: left(-) → right(+), y: posterior(-) → anterior(+)
+    _ELECTRODE_POS = {
+        "FP1": (-0.15, 0.45), "FP2": (0.15, 0.45), "FPZ": (0.0, 0.45),
+        "F7":  (-0.40, 0.25), "F3":  (-0.20, 0.25), "FZ":  (0.0, 0.25),
+        "F4":  (0.20, 0.25),  "F8":  (0.40, 0.25),
+        "A1":  (-0.50, 0.0),  "T3":  (-0.45, 0.0),  "C3":  (-0.20, 0.0),
+        "CZ":  (0.0, 0.0),    "C4":  (0.20, 0.0),   "T4":  (0.45, 0.0),
+        "A2":  (0.50, 0.0),
+        "T5":  (-0.40, -0.25), "P3":  (-0.20, -0.25), "PZ":  (0.0, -0.25),
+        "P4":  (0.20, -0.25),  "T6":  (0.40, -0.25),
+        "O1":  (-0.15, -0.45), "O2":  (0.15, -0.45), "OZ":  (0.0, -0.45),
+        # Aliases used in some 10-20 systems
+        "T7":  (-0.45, 0.0),  "T8":  (0.45, 0.0),
+        "P7":  (-0.40, -0.25), "P8":  (0.40, -0.25),
+        "F9":  (-0.48, 0.30), "F10": (0.48, 0.30),
+    }
+
+    def _bipolar_midpoint(self, label: str):
+        """Return (x, y) midpoint for a bipolar channel like 'FP1-F7'."""
+        import numpy as np
+        parts = label.strip().upper().replace(" ", "").split("-")
+        if len(parts) == 2:
+            a, b = parts
+            pa = self._ELECTRODE_POS.get(a)
+            pb = self._ELECTRODE_POS.get(b)
+            if pa and pb:
+                return ((pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0)
+        # single (monopolar) channel
+        p = self._ELECTRODE_POS.get(parts[0])
+        if p:
+            return p
+        return None
+
+    def _generate_topomap_b64(
+        self,
+        channel_names: List[str],
+        probabilities: "np.ndarray",
+    ) -> Optional[str]:
+        """Render an MNE-style topomap of SOZ probabilities and return base64 PNG."""
+        import numpy as np
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import mne
+
+        positions = []
+        values = []
+        names = []
+        for ch, prob in zip(channel_names, probabilities):
+            pos = self._bipolar_midpoint(ch)
+            if pos is not None:
+                positions.append(pos)
+                values.append(float(prob))
+                names.append(ch)
+
+        if len(positions) < 3:
+            logger.warning("[SOZ] Not enough positioned channels for topomap (%d)", len(positions))
+            return None
+
+        pos_arr = np.array(positions, dtype=np.float64)
+        val_arr = np.array(values, dtype=np.float64)
+
+        # Build an MNE Info with fake DigMontage so plot_topomap works
+        info = mne.create_info(ch_names=names, sfreq=256, ch_types="eeg")
+        # Create a custom DigMontage from the 2-D positions
+        # MNE expects 3-D positions (x, y, z). Set z=0 for a flat head model.
+        montage = mne.channels.make_dig_montage(
+            ch_pos={n: [p[0], p[1], 0.0] for n, p in zip(names, positions)},
+            coord_frame="head",
+        )
+        info.set_montage(montage)
+
+        fig, ax = plt.subplots(1, 1, figsize=(5, 5))
+        im, _ = mne.viz.plot_topomap(
+            val_arr,
+            info,
+            axes=ax,
+            show=False,
+            cmap="RdYlGn_r",
+            vlim=(0.0, 1.0),
+            contours=4,
+            sensors=True,
+            names=names,
+        )
+        cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.06)
+        cbar.set_label("SOZ Probability", fontsize=10)
+        ax.set_title("SOZ Likelihood Brain Map", fontsize=13, fontweight="bold", pad=12)
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", bbox_inches="tight", dpi=150, facecolor="white")
+        plt.close(fig)
+        buf.seek(0)
+        return base64.b64encode(buf.read()).decode("ascii")
 
     def predict_from_edf_bytes(
         self,
@@ -281,7 +381,7 @@ class SOZInferenceService:
                 top_channels.append(
                     {
                         "channel": kept_nodes[idx],
-                        "soc_probability": p,
+                        "soz_probability": p,
                         "above_threshold": bool(p >= self.best_thr),
                     }
                 )
@@ -290,6 +390,17 @@ class SOZInferenceService:
 
             total_ms = (_tick() - t0) * 1000.0
             logger.info(f"[SOZ] DONE predict | total_ms={total_ms:.1f} | top={top_channels[0] if top_channels else None}")
+
+            # 11) Generate topomap
+            topomap_b64 = None
+            try:
+                topomap_b64 = self._generate_topomap_b64(kept_nodes, probs)
+                if topomap_b64:
+                    logger.info("[SOZ] STEP topomap OK")
+                else:
+                    logger.warning("[SOZ] Topomap generation returned None (too few positioned channels)")
+            except Exception as topo_err:
+                logger.warning(f"[SOZ] Topomap generation failed (non-fatal): {topo_err}")
 
             resp = {
                 "ok": True,
@@ -300,6 +411,7 @@ class SOZInferenceService:
                 "template_nodes_count": len(self.template_nodes),
                 "matched_nodes_count": len(kept_nodes),
                 "top_channels": top_channels,
+                "topomap_png_base64": topomap_b64,
             }
 
             if debug:

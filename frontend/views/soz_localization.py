@@ -13,14 +13,14 @@ def render():
     if "uploader_version" not in st.session_state:
         st.session_state["uploader_version"] = 0
 
-    # ✅ Match ASM page spacing + add SOZ wrapper to scope CSS
+    # Match ASM page spacing + add SOZ wrapper to scope CSS
     css = """
     <style>
         /* --- MOVE EVERYTHING UP --- */
         .block-container{
             padding-top: 0rem !important;
             padding-bottom: 0rem !important;
-            margin-top: -1.5rem !important;     /* ✅ pull content upward */
+            margin-top: -1.5rem !important;     /* pull content upward */
         }
 
 
@@ -97,7 +97,7 @@ def render():
     """
     st.markdown(css, unsafe_allow_html=True)
 
-    # ✅ same centering trick as ASM page
+    # same centering trick as ASM page
     left, mid, right = st.columns([1, 40, 1], vertical_alignment="top")
 
     with mid:
@@ -262,7 +262,7 @@ def render():
                     st.session_state["soz_result"] = data
 
                     try:
-                        st.toast("Analysis complete ✅", icon="✅")
+                        st.toast("Analysis complete ", icon="✅")
                     except Exception:
                         pass
 
