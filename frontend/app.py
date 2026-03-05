@@ -1,242 +1,422 @@
 import base64
+import json
 from pathlib import Path
+
 import streamlit as st
+import extra_streamlit_components as stx
+
+from utils.google_oauth import GoogleOAuth
+from utils.api_client import post, get
 
 from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page
 
-LOGO_PATH = Path("assets/logo.jpg")
+
+LOGO_PATH = Path("assets/logo.png")
 page_icon = str(LOGO_PATH) if LOGO_PATH.exists() else "🧠"
 
 st.set_page_config(
     page_title="NeuroHeaven",
     page_icon=page_icon,
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
-# Hide Streamlit default UI elements
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] {display: none;}
-    [data-testid="stSidebarNav"] {display: none;}
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+def handle_google_callback():
+    code = st.query_params.get("code")
+    if not code:
+        return
 
-# Encode logo
-if LOGO_PATH.exists():
-    logo_b64 = base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
-    logo_tag = f'<img class="nh-logo" src="data:image/jpeg;base64,{logo_b64}" />'
-else:
-    logo_tag = (
-        '<div class="nh-logo" '
-        'style="border-radius:12px;background:#4A7DFF;'
-        'color:white;display:flex;align-items:center;'
-        'justify-content:center;font-weight:700;">NH</div>'
+    google_oauth = GoogleOAuth()
+
+    result = google_oauth.handle_callback(
+        code if isinstance(code, str) else code[0]
     )
 
-CSS = """
+    if result["success"] and result["user"]:
+        user_info = result["user"]
+
+        data = post("/auth/google-login", {
+            "email": user_info["email"],
+            "name": user_info["name"],
+            "picture": user_info["picture"],
+            "google_id": user_info["google_id"]
+        })
+
+        st.session_state["token"] = data["access_token"]
+        st.session_state["user"] = get(
+            "/auth/me",
+            token=st.session_state["token"]
+        )
+
+        st.query_params.clear()
+
+        st.rerun()
+
+    else:
+        st.query_params.clear()
+        st.error("Google authentication failed.")
+
+handle_google_callback()
+
+if "nh_cm_manager" not in st.session_state:
+    st.session_state["nh_cm_manager"] = stx.CookieManager(key="nh_cookie_manager_v5")
+
+cm = st.session_state["nh_cm_manager"]
+st.session_state["_nh_cm"] = cm  
+
+def _restore_auth_from_cookies():
+    if st.session_state.get("token"):
+        return
+
+    try:
+        auth_cookie = cm.get("nh_auth")
+    except Exception:
+        st.stop()
+
+    if not auth_cookie:
+        return
+
+    try:
+        auth = json.loads(auth_cookie) if isinstance(auth_cookie, str) else auth_cookie
+        token_cookie = auth.get("token")
+        user_obj = auth.get("user") or {}
+
+        if token_cookie:
+            st.session_state["token"] = token_cookie
+            st.session_state["user"] = user_obj
+            st.rerun()
+    except Exception:
+        pass
+
+_restore_auth_from_cookies()
+
+
+def _persist_auth_to_cookie(token: str, user: dict):
+    """Persist auth token and user to cookie."""
+    if not token:
+        return
+    try:
+        from datetime import datetime, timedelta, timezone
+        expires = datetime.now(timezone.utc) + timedelta(days=7)
+        auth_payload = json.dumps({"token": token, "user": user})
+        cm.set("nh_auth", auth_payload, expires_at=expires)
+    except Exception:
+        pass
+
+
+def ls_set(key: str, value: str):
+    """No-op placeholder for localStorage set (not available in Streamlit)."""
+    pass
+
+
+def ls_del(key: str):
+    """No-op placeholder for localStorage delete (not available in Streamlit)."""
+    pass
+
+qp_page = st.query_params.get("page")
+if isinstance(qp_page, list):
+    qp_page = qp_page[0]
+
+if qp_page:
+    st.session_state["page"] = qp_page
+elif "page" not in st.session_state:
+    st.session_state["page"] = "home"
+
+
+def go_to(page_key: str):
+    st.session_state["page"] = page_key
+    st.query_params["page"] = page_key
+    st.rerun()
+
+
+def do_logout():
+    st.session_state.pop("token", None)
+    st.session_state.pop("user", None)
+    try:
+        cm.delete("nh_auth")
+    except Exception:
+        pass
+    ls_del("nh_token")
+    ls_del("nh_user")
+    st.query_params.clear()
+    st.query_params["page"] = "home"
+    st.rerun()
+
+
+current_page = st.session_state.get("page", "home")
+token = st.session_state.get("token")
+user = st.session_state.get("user") or {}
+user_name = user.get("full_name") or user.get("name") or user.get("email") or "User"
+
+if token:
+    _persist_auth_to_cookie(token, user)
+    ls_set("nh_token", token)
+    ls_set("nh_user", json.dumps(user or {}))
+
+PROTECTED_PAGES = {"eeg", "soz", "mri", "asm"}
+if (not token) and (current_page in PROTECTED_PAGES):
+    st.session_state["pending_page"] = current_page
+    auth_page.open("signin")
+    go_to("home")
+
+logo_img_src = None
+if LOGO_PATH.exists():
+    logo_b64 = base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
+    logo_img_src = f"data:image/png;base64,{logo_b64}"
+
+def _svg(icon_name: str) -> str:
+    if icon_name == "home":
+        return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9.5V21h14V9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    if icon_name == "pulse":
+        return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 12h4l2-6 4 12 2-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    if icon_name == "pill":
+        return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 14l4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 17a5 5 0 0 1 0-7l3-3a5 5 0 0 1 7 7l-3 3a5 5 0 0 1-7 0Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    if icon_name == "scan":
+        return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3H5a2 2 0 0 0-2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 3h2a2 2 0 0 1 2 2v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M7 21H5a2 2 0 0 1-2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 21h2a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>'
+    return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 8a3 3 0 0 1 3-3c1.7 0 3 1.3 3 3v.3a2.7 2.7 0 0 1 2 2.6v3.6A3.5 3.5 0 0 1 15.5 20H14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 8v.3A2.7 2.7 0 0 0 7 10.9v3.6A3.5 3.5 0 0 0 10.5 20H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 5v15" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.6"/></svg>'
+
+
+CSS = f"""
 <style>
-.block-container {
-    padding-top: 0rem;
-    padding-left: 1rem;
-    padding-right: 1rem;
-}
-header[data-testid="stHeader"] {
-    background: transparent;
-}
+MainMenu {{visibility: hidden;}}
+footer {{visibility: hidden;}}
+header[data-testid="stHeader"] {{ display: none !important; }}
 
-/* NAV ---------------------------------------------------------- */
-/* NAV ---------------------------------------------------------- */
-.nh-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.9rem 1rem;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !important; }}
+{"section[data-testid='stSidebar']{display:block !important;}" if token else "section[data-testid='stSidebar']{display:none !important;}"}
 
-    background: rgba(255, 255, 255, 0.96);
-    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
-    box-shadow: 0 10px 25px rgba(15, 52, 96, 0.06);
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    backdrop-filter: blur(12px);
-}
+section[data-testid="stSidebar"] {{
+  background: linear-gradient(180deg, #20A0D8 0%, #0E5C7A 100%) !important;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}}
+section[data-testid="stSidebar"] > div {{
+  padding-top: 0 !important;
+  height: 100vh !important;
+}}
+section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
+  height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding: 0.01rem 0.95rem 0.95rem 0.95rem !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}}
 
-.nh-left {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    min-width: fit-content;
-}
+.sb-brand {{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap: 0.85rem;
+  padding: 0 0 0.7rem 0;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.14);
+}}
+.sb-logo {{
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
+}}
+.sb-brand-name {{
+  color:#fff;
+  font-weight: 900;
+  letter-spacing: 0.10em;
+  font-size: 1.45rem;
+  text-transform: uppercase;
+}}
 
-.nh-logo {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    object-fit: cover;
-}
+.nav-shell {{
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}}
+.nav-shell::-webkit-scrollbar {{ width: 8px; }}
+.nav-shell::-webkit-scrollbar-thumb {{
+  background: rgba(255,255,255,0.18);
+  border-radius: 8px;
+}}
+.nav-shell::-webkit-scrollbar-track {{
+  background: rgba(255,255,255,0.05);
+}}
 
-.nh-brand-text-main {
-    font-weight: 800;
-    font-size: 1.6rem;
-    letter-spacing: 0.02em;
-    color: #1E3A5F;
-}
+.nav-item {{
+  position: relative;
+  margin-bottom: 0.4rem;
+}}
+.nh-nav-card {{
+  display:flex;
+  align-items:flex-start;
+  gap: 0.85rem;
+  padding: 0.90rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.12);
+  backdrop-filter: blur(10px);
+  user-select: none;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+}}
+.nav-item:hover .nh-nav-card {{
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.22);
+}}
+.nav-item:active .nh-nav-card {{
+  transform: scale(0.99);
+}}
+.nav-item.active .nh-nav-card {{
+  background: rgba(185, 226, 255, 0.92);
+  border-color: rgba(185, 226, 255, 0.92);
+}}
 
-.nh-brand-text-sub {
-    font-weight: 800;
-    font-size: 1.6rem;
-    color: #74B0D3;
-    margin-left: 0.15rem;
-}
+.nh-ico {{
+  width: 22px;
+  height: 22px;
+  margin-top: 0.12rem;
+  flex: 0 0 auto;
+  color: rgba(235, 248, 255, 0.98);
+}}
+.nav-item.active .nh-ico {{
+  color: rgba(11,42,87,0.95);
+}}
+.nh-nav-text {{
+  display:flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}}
+.nh-nav-title {{
+  font-weight: 850;
+  font-size: 1.02rem;
+  color: rgba(255,255,255,0.98);
+  line-height: 1.1;
+}}
+.nh-nav-sub {{
+  font-weight: 520;
+  font-size: 0.86rem;
+  color: rgba(255,255,255,0.76);
+  line-height: 1.15;
+}}
+.nav-item.active .nh-nav-title {{ color: #0B2A57; }}
+.nav-item.active .nh-nav-sub {{ color: rgba(11,42,87,0.75); }}
 
-/* Desktop menu container */
-.nh-center-nav {
-    display: flex;
-    gap: 2.2rem;
-    font-size: 0.98rem;
-    font-weight: 500;
-    color: #4C5A6B;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-}
+/* user */
+.sb-user {{
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(255,255,255,0.14);
+}}
+.sb-user-row {{
+  color:#fff;
+  font-weight: 800;
+  display:flex;
+  align-items:center;
+  gap:0.5rem;
+}}
 
-.nh-center-nav form {
-    margin: 0;
-    display: inline;
-}
+/* Hide ALL nav buttons in sidebar - make them overlay the cards */
+section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) {{
+  position: relative !important;
+  margin-top: -60px !important;
+  margin-bottom: -10px !important;
+  height: 55px !important;
+  z-index: 100 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) button {{
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: transparent !important;
+  height: 55px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}}
 
-.nh-nav-link {
-    background: transparent;
-    border: none;
-    padding: 0;
-    font: inherit;
-    color: inherit;
-    cursor: pointer;
-    position: relative;
-    padding-bottom: 0.1rem;
-    white-space: nowrap;
-}
+/* Reduce Streamlit element gaps in sidebar */
+section[data-testid="stSidebar"] [data-testid="stMarkdown"] {{
+  margin-bottom: 0 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
+  gap: 0.50rem !important;
+}}
 
-.nh-nav-link:hover { color: #1B2B3C; }
+/* Logout button - last button in sidebar */
+section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type {{
+  margin-top: -60px !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button {{
+  width: 100% !important;
+  height: 65px !important;
+  border-radius: 14px !important;
+  padding: 0.85rem 0.95rem 0.85rem 0.001rem !important;
+  font-weight: 900 !important;
+  color: #fff !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  gap: 0.5rem !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button::before {{
+  content: "" !important;
+  display: inline-block !important;
+  width: 18px !important;
+  height: 18px !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  flex-shrink: 0 !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button:hover {{
+  background: rgba(255,255,255,0.16) !important;
+}}
+.sb-user {{ 
+    margin-bottom: 4rem !important; 
+}}
+.logout-wrap {{ 
+    margin-top: 0 !important; 
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}}
+section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button{{
+  width: 100% !important;
+  height: 34px !important;   /* reduced */
+  border-radius: 10px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+  background: rgba(255,255,255,0.12) !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  box-shadow: none !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  padding: 0.2rem 0.2rem !important;  /* reduced */
+  font-size: 0.85rem !important;
+}}
 
-.nh-nav-link.active {
-    color: #74B0D3 !important;
-    font-weight: 700;
-}
-
-/* MOBILE: hamburger */
-.nh-hamburger {
-    display: none;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0.4rem;
-    border-radius: 10px;
-}
-.nh-hamburger svg { width: 28px; height: 28px; fill: #1E3A5F; }
-.nh-hamburger:hover { background: rgba(116, 176, 211, 0.12); }
-
-/* Overlay menu (mobile) */
-.nh-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 16, 28, 0.92);
-    z-index: 9999;
-    display: none;
-}
-
-/* show overlay when targeted */
-.nh-overlay:target {
-    display: block;
-}
-
-.nh-overlay-inner {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-}
-
-.nh-overlay-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.1rem 1.2rem;
-}
-
-.nh-overlay-close {
-    font-size: 2rem;
-    line-height: 1;
-    text-decoration: none;
-    color: #ffffff;
-    opacity: 0.9;
-}
-.nh-overlay-close:hover { opacity: 1; }
-
-.nh-overlay-menu {
-    padding: 0.5rem 1.2rem 2rem 1.2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1.2rem;
-}
-
-.nh-overlay-menu form { margin: 0; }
-
-.nh-overlay-link {
-    width: 100%;
-    text-align: left;
-    background: transparent;
-    border: none;
-    color: #ffffff;
-    font-size: 1.4rem;
-    font-weight: 600;
-    padding: 0.4rem 0;
-    cursor: pointer;
-}
-
-.nh-overlay-link.active {
-    color: #74B0D3;
-}
-
-/* Responsive switch */
-@media (max-width: 900px) {
-    .nh-center-nav { display: none; }
-    .nh-hamburger { display: inline-flex; }
-}
-
+section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button:hover{{
+  background: transparent !important;
+  border-color: transparent !important;
+  transform: none !important;
+}}
 
 /* HERO --------------------------------------------------------- */
-.nh-hero-wrapper {
+.nh-hero-wrapper {{
     width: 100%;
-    padding-top: 2.5rem;
-    padding-bottom: 2.5rem;
-}
+    padding-top: 0;
+    padding-bottom: 1.5rem;
+}}
 
-.nh-hero {
-    padding: 2.2rem 2.5rem 3.2rem 2.5rem;
+.nh-hero {{
+    padding: 1.5rem 2.5rem 2.5rem 2.5rem;
     border-radius: 24px;
-    background: linear-gradient(
-        90deg,
-        #F4FBFF 0%,
-        #FFFFFF 50%,
-        #FFFFFF 100%
-    );
+    background: linear-gradient(90deg, #F4FBFF 0%, #FFFFFF 50%, #FFFFFF 100%);
     box-shadow: 0 18px 40px rgba(15, 52, 96, 0.06);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-}
+}}
 
-.nh-pill {
+.nh-pill {{
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -248,9 +428,9 @@ header[data-testid="stHeader"] {
     color: #74B0D3;
     border: 1px solid #74B0D3;
     margin-bottom: 1.4rem;
-}
+}}
 
-.nh-pill-icon {
+.nh-pill-icon {{
     width: 18px;
     height: 18px;
     border-radius: 999px;
@@ -260,9 +440,9 @@ header[data-testid="stHeader"] {
     justify-content: center;
     font-size: 0.8rem;
     background: #FFFFFF;
-}
+}}
 
-.nh-hero-title {
+.nh-hero-title {{
     font-size: 5rem !important;
     line-height: 1.05 !important;
     max-width: 1400px !important;
@@ -270,43 +450,43 @@ header[data-testid="stHeader"] {
     color: #1E3A5F !important;
     margin: 0 !important;
     text-align: center !important;
-}
+}}
 
-.nh-hero-title span:nth-child(2) {
+.nh-hero-title span:nth-child(2) {{
     display: block !important;
     margin-top: 0.5rem !important;
     color: #74B0D3 !important;
-}
+}}
 
-.nh-hero-subtext {
+.nh-hero-subtext {{
     margin-top: -4.5rem !important;
     max-width: 830px;
     font-size: 1.2rem !important;
     color: #49576B;
     line-height: 1.7;
-}
+}}
 
 /* STATS SECTION ------------------------------------------------ */
-.nh-stats {
+.nh-stats {{
     max-width: 1200px;
     margin: 2rem auto 0 auto;
     border-radius: 24px;
     display: flex;
     justify-content: space-between;
     gap: 2.5rem;
-}
+}}
 
-.nh-stat-card {
+.nh-stat-card {{
     flex: 1;
     text-align: center;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
+}}
 
-.nh-stat-card:not(:last-child) {
+.nh-stat-card:not(:last-child) {{
     border-right: 1px solid #E5EDF7;
-}
+}}
 
-.nh-stat-icon {
+.nh-stat-icon {{
     width: 72px;
     height: 72px;
     border-radius: 24px;
@@ -317,279 +497,271 @@ header[data-testid="stHeader"] {
     font-size: 2rem;
     margin: 0 auto 1.5rem;
     color: #1E3A5F;
-}
+}}
 
-.nh-stat-value {
+.nh-stat-value {{
     font-size: 2.4rem;
     font-weight: 700;
     color:  #1E3A5F;
     margin-bottom: 0rem;
-}
+}}
 
-.nh-stat-label-main {
+.nh-stat-label-main {{
     font-size: 1rem;
     font-weight: 700;
     color: #1E3A5F;
-}
+}}
 
 /* WHY SECTION -------------------------------------------------- */
-.nh-why-section {
+.nh-why-section {{
     padding: 6rem 0 6rem;
     background: linear-gradient(to bottom, rgba(244, 251, 255, 0.7), #ffffff);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-}
+}}
 
-.nh-why-inner {
+.nh-why-inner {{
     max-width: 1200px;
     margin: 0 auto;
     text-align: center;
-}
+}}
 
-.nh-why-header {
+.nh-why-header {{
     margin-bottom: 3.5rem;
-}
+}}
 
-.nh-why-title {
+.nh-why-title {{
     font-size: 3.5rem !important;
     font-weight: 700 !important;
     color: #1E3A5F;
     margin-top: -1.5rem !important;
     margin-bottom: 0.75rem;
-}
+}}
 
-.nh-why-subtitle {
+.nh-why-subtitle {{
     font-size: 1.15rem !important;
     color: #4B5563;
     max-width: 800px;
     justify-content: center !important;
     margin-left: 10rem !important;
     margin: 0 auto;
-}
+}}
 
-.nh-why-grid {
+.nh-why-grid {{
     display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-    gap: 2.5rem;
-}
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2rem;
+}}
 
-@media (min-width: 768px) {
-    .nh-why-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (min-width: 1024px) {
-    .nh-why-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
+/* Horizontal Navbar for logged-out users */
+.nh-navbar {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0rem 0rem;
+    background: #fff;
+    border-bottom: 4px solid #20A0D8;
+    margin: 0 -1rem 4rem -1rem; !important;
+    width: calc(100% + 2rem);
+    box-shadow: 0 6px 24px rgba(14, 92, 122, 0.12);
+}}
+.nh-navbar-left {{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}}
+.nh-navbar-logo {{
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    object-fit: cover;
+}}
+.nh-navbar-brand {{
+    display: flex;
+    align-items: center;
+}}
+.nh-brand-text-main {{
+    font-weight: 900;
+    font-size: 1.35rem;
+    color: #1E3A5F;
+    letter-spacing: 0.02em;
+}}
+.nh-brand-text-sub {{
+    font-weight: 700;
+    font-size: 1.35rem;
+    color: #74B0D3;
+    letter-spacing: 0.02em;
+}}
+.nh-navbar-right {{
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}}
+/* Navbar auth buttons - pill style with gradient */
+[data-testid="stAppViewContainer"] [data-testid="stHorizontalBlock"] [data-testid="stButton"] button {{
+    padding: 0.5rem 2rem !important;
+    border-radius: 50px !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    min-width: 110px !important;
+    white-space: nowrap !important;
+    transition: all 0.15s ease !important;
+    background: linear-gradient(90deg, #00c6fb 0%, #005bea 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    box-shadow: 0 4px 15px rgba(0, 91, 234, 0.3) !important;
+}}
+[data-testid="stAppViewContainer"] [data-testid="stHorizontalBlock"] [data-testid="stButton"] button:hover {{
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(0, 91, 234, 0.4) !important;
+}}
 
-.nh-benefit-card { text-align: center; }
+/* BENEFIT CARDS ------------------------------------------------ */
+.nh-benefit-card {{
+    text-align: center;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}}
 
-.nh-benefit-icon {
-    width: 96px;
-    height: 96px;
-    border-radius: 999px;
-    background: #F3F7FF;
-    margin: 0 auto 1.5rem;
+.nh-benefit-icon {{
+    margin-bottom: 1rem;
+    height: 50px;
     display: flex;
     align-items: center;
     justify-content: center;
-}
+}}
 
-.nh-benefit-title {
-    font-size: 1.2rem;
+.nh-benefit-title {{
+    font-size: 1.25rem;
     font-weight: 700;
     color: #1E3A5F;
-    margin-bottom: 0.75rem;
-}
+    margin-bottom: 0.5rem;
+    min-height: 3rem;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    white-space: nowrap;
+}}
 
-.nh-benefit-text {
-    font-size: 0.98rem;
+.nh-benefit-text {{
+    font-size: 0.85rem;
     color: #4B5563;
-    line-height: 1.7;
-}
+    line-height: 1.5;
+    max-width: 220px;
+    margin: 0 auto;
+}}
 
-/* smaller screens */
-@media (max-width: 900px) {
-    .nh-stats {
-        flex-direction: column;
-        padding: 2rem;
-    }
-    .nh-stat-card:not(:last-child) {
-        border-right: none;
-        border-bottom: 1px solid #E5EDF7;
-        padding-bottom: 1.5rem;
-        margin-bottom: 1.5rem;
-    }
-}
 </style>
 """
-
-
 st.markdown(CSS, unsafe_allow_html=True)
 
-# Routing helper
-page_param = st.query_params.get("page", ["home"])
-current_page = page_param[0] if isinstance(page_param, list) else page_param
 
-auth_action = st.query_params.get("auth", [None])
-auth_action = auth_action[0] if isinstance(auth_action, list) else auth_action
+# SIDEBAR NAV
+if token:
+    with st.sidebar:
+        brand_logo_html = (
+            f'<img class="sb-logo" src="{logo_img_src}" />'
+            if logo_img_src
+            else '<div class="sb-logo" style="background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;">NH</div>'
+        )
+        st.markdown(
+            f'<div class="sb-brand">{brand_logo_html}<div class="sb-brand-name">NEUROHEAVEN</div></div>',
+            unsafe_allow_html=True,
+        )
 
-# Handle auth actions from navbar (signin/signup/logout)
-if auth_action in ("signin", "signup"):
-    auth_page.open(auth_action)
-    # remove auth param after consuming it
-    st.query_params.pop("auth", None)
-    st.rerun()
+        nav_items = [
+            ("home", "home", "Home", "Overview"),
+            ("eeg", "brain", "EEG Diagnosis", "Case-Based Reasoning"),
+            ("soz", "pulse", "SOZ Localization", "EEG Graph Analysis"),
+            ("mri", "scan", "MRI Detection", "Lesion Analysis"),
+            ("asm", "pill", "ASM Predictor", "Treatment Response"),
+        ]
 
-if auth_action == "logout":
-    st.session_state.pop("token", None)
-    st.session_state.pop("user", None)
-    st.query_params.pop("auth", None)
-    st.rerun()
+        st.markdown('<div class="nav-shell">', unsafe_allow_html=True)
 
-# Auth guard
-PUBLIC_PAGES = {"home"}
-token = st.session_state.get("token")
-if (not token) and (current_page not in PUBLIC_PAGES):
-    st.session_state["pending_page"] = current_page
-    auth_page.open("signin")
-    # send them to home underneath (background)
-    st.query_params["page"] = "home"
-    current_page = "home"
+        for key, ico, title, subtitle in nav_items:
+            active = "active" if current_page == key else ""
+            st.markdown(f'<div class="nav-item {active}">', unsafe_allow_html=True)
 
-# Build right-side auth HTML
-user = st.session_state.get("user") or {}
-user_name = user.get("full_name") or user.get("email")  # fallback to email if full_name not available
+            st.markdown(
+                f"""
+                <div class="nh-nav-card">
+                    {_svg(ico)}
+                    <div class="nh-nav-text">
+                        <div class="nh-nav-title">{title}</div>
+                        <div class="nh-nav-sub">{subtitle}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-right_html = ""
-if token and user_name:
-    right_html = f"""
-<div class="nh-right">
-<span class="nh-user">{user_name}</span>
-<form method="get" style="display:inline;margin:0;">
-<input type="hidden" name="page" value="{current_page}">
-<input type="hidden" name="auth" value="logout">
-<button class="nh-btn" type="submit">Log out</button>
-</form>
-</div>
-"""
-    
-else:
-    # show Sign In / Sign Up on right corner
-    right_html = f"""
-<div class="nh-right">
-<form method="get" style="display:inline;margin:0;">
-<input type="hidden" name="page" value="{current_page}">
-<input type="hidden" name="auth" value="signin">
-<button class="nh-btn" type="submit">Sign In</button>
-</form>
-<form method="get" style="display:inline;margin:0;">
-<input type="hidden" name="page" value="{current_page}">
-<input type="hidden" name="auth" value="signup">
-<button class="nh-btn primary" type="submit">Sign Up</button>
-</form>
-</div>
-"""
+            if st.button(" ", key=f"nav_{key}", use_container_width=True):
+                go_to(key)
 
-# NAVBAR HTML
-st.markdown(f"""
-<div class="nh-nav">
-<div class="nh-left">
-{logo_tag}
-<div style="display:flex;align-items:center;">
-<span class="nh-brand-text-main">NEURO</span>
-<span class="nh-brand-text-sub">HEAVEN</span>
-</div>
-</div>
+            st.markdown("</div>", unsafe_allow_html=True)
 
-<div class="nh-center-nav">
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="home">
-<button class="nh-nav-link {'active' if current_page=='home' else ''}">Home</button>
-</form>
+        st.markdown("</div>", unsafe_allow_html=True)
 
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="eeg">
-<button class="nh-nav-link {'active' if current_page=='eeg' else ''}">EEG Diagnosis</button>
-</form>
+        st.markdown(
+            f'<div class="sb-user"><div class="sb-user-row">👤 <span>{user_name}</span></div></div>',
+            unsafe_allow_html=True,
+        )
 
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="soz">
-<button class="nh-nav-link {'active' if current_page=='soz' else ''}">SOZ Localization</button>
-</form>
+        st.markdown('<div class="logout-wrap">', unsafe_allow_html=True)
+        if st.button("Log out", key="logout_btn", use_container_width=False):
+            do_logout()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="mri">
-<button class="nh-nav-link {'active' if current_page=='mri' else ''}">MRI Detection</button>
-</form>
-
-<form method="get" style="display:inline;">
-<input type="hidden" name="page" value="asm">
-<button class="nh-nav-link {'active' if current_page=='asm' else ''}">ASM Response</button>
-</form></div>
-
-{right_html}
-
-<a class="nh-hamburger" href="#nh-menu" aria-label="Open menu">
-<svg viewBox="0 0 24 24" aria-hidden="true">
-<path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/>
-</svg>
-</a>
-</div>
-
-<div id="nh-menu" class="nh-overlay">
-<div class="nh-overlay-inner">
-<div class="nh-overlay-top">
-<div style="display:flex;align-items:center;gap:0.6rem;">
-{logo_tag}
-<div style="display:flex;align-items:center;">
-<span class="nh-brand-text-main" style="color:#fff;">NEURO</span>
-<span class="nh-brand-text-sub">HEAVEN</span>
-</div>
-</div>
-<a href="#" class="nh-overlay-close" aria-label="Close menu">&times;</a>
-</div>
-
-<div class="nh-overlay-menu">
-<form method="get"><input type="hidden" name="page" value="home">
-<button class="nh-overlay-link {'active' if current_page=='home' else ''}">Home</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="eeg">
-<button class="nh-overlay-link {'active' if current_page=='eeg' else ''}">EEG Diagnosis</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="soz">
-<button class="nh-overlay-link {'active' if current_page=='soz' else ''}">SOZ Localization</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="mri">
-<button class="nh-overlay-link {'active' if current_page=='mri' else ''}">MRI Detection</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="asm">
-<button class="nh-overlay-link {'active' if current_page=='asm' else ''}">ASM Response</button>
-</form>
-
-<form method="get"><input type="hidden" name="page" value="auth"><input type="hidden" name="tab" value="signin">
-<button class="nh-overlay-link {'active' if current_page=='auth' else ''}">Account</button>
-</form>
-</div>
-</div>
-</div>
-""", unsafe_allow_html=True)
-
-# REAL logout action (HTML can’t safely clear session_state)
 if st.session_state.get("auth_open"):
     auth_page.render_dialog()
+    if st.session_state.get("token"):
+        _persist_auth_to_cookie(st.session_state["token"], st.session_state.get("user") or {})
+        ls_set("nh_token", st.session_state["token"])
+        ls_set("nh_user", json.dumps(st.session_state.get("user") or {}))
 
-# ROUTES
+if not token:
+    logo_tag = f'<img class="nh-navbar-logo" src="{logo_img_src}" />' if logo_img_src else ''
+    
+    t_logo, t_spacer, t_auth = st.columns([2.5, 5, 2.5])
+    
+    with t_logo:
+        st.markdown(
+            f'''
+            <div class="nh-navbar-left">
+                {logo_tag}
+                <div class="nh-navbar-brand">
+                    <span class="nh-brand-text-main">NEURO</span>
+                    <span class="nh-brand-text-sub">HEAVEN</span>
+                </div>
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
+    
+    with t_auth:
+        auth_col1, auth_col2 = st.columns(2)
+        with auth_col1:
+            if st.button("Login", key="home_login_btn", use_container_width=True):
+                auth_page.open("signin")
+                st.rerun()
+        with auth_col2:
+            if st.button("Sign Up", key="home_signup_btn", use_container_width=True):
+                auth_page.open("signup")
+                st.rerun()
+
+current_page = st.session_state.get("page", "home")
+
 if current_page == "home":
     home.render()
-elif current_page == "asm":
-    asm_response.render()
 elif current_page == "eeg":
     eeg_diagnosis.render()
 elif current_page == "soz":
     soz_localization.render()
 elif current_page == "mri":
     mri_detection.render()
+elif current_page == "asm":
+    asm_response.render()
 else:
     home.render()

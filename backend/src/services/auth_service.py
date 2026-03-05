@@ -174,3 +174,57 @@ class AuthService:
         except Exception as e:
             logger.error(f"Error fetching user: {e}")
             return None
+
+    def google_login(self, email: str, full_name: str, picture: Optional[str] = None, google_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Login or register user via Google OAuth.
+        Creates a new user if they don't exist, otherwise logs them in.
+        """
+        # Find existing user by email
+        user_doc = self.users_collection.find_one({"email": email})
+        
+        if user_doc:
+            # User exists, just update last login and return token
+            self.users_collection.update_one(
+                {"_id": user_doc["_id"]},
+                {"$set": {
+                    "updated_at": datetime.utcnow(),
+                    "picture": picture,
+                    "google_id": google_id
+                }}
+            )
+        else:
+            # Create new user
+            user_doc = {
+                "_id": ObjectId(),
+                "email": email,
+                "full_name": full_name,
+                "picture": picture,
+                "google_id": google_id,
+                "hashed_password": "",  # No password for OAuth users
+                "is_active": True,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
+            self.users_collection.insert_one(user_doc)
+        
+        # Generate token
+        token = self.create_access_token(str(user_doc["_id"]))
+        
+        logger.info(f"User logged in via Google: {email}")
+        
+        # Format response
+        user_response = {
+            "_id": str(user_doc["_id"]),
+            "email": user_doc["email"],
+            "full_name": user_doc["full_name"],
+            "picture": user_doc.get("picture"),
+            "created_at": user_doc["created_at"],
+            "updated_at": user_doc["updated_at"]
+        }
+        
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "user": user_response
+        }
