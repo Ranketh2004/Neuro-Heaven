@@ -229,7 +229,7 @@ class SOZInferenceService:
         import torch
         from torch_geometric.data import Data
 
-        from src.services.epi_diagnosis.soz_preprocessing import (
+        from src.services.soz_preprocessing import (
             preprocess_scalp,
             build_node_signals,
             node_features_from_signals,
