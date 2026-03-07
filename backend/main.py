@@ -5,8 +5,8 @@ import logging
 
 from src.routes.epi_diagnosis import epi_router
 from src.routes.auth.route import router as auth_router
-from src.services.epi_diagnosis.soz_inference_service import SOZInferenceService
-from src.services.epi_diagnosis.mri_inference_service import MRIFCDInferenceService
+from src.services.soz_inference_service import SOZInferenceService
+from src.services.mri_inference_service import MRIFCDInferenceService
 from src.config.database import MongoDatabase
 
 # Configure logging
