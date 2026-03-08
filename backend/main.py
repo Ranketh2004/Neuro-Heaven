@@ -71,13 +71,11 @@ def load_soz_and_mri_services():
 
     # -------- MRI --------
     try:
-        mri_model_path = base_models_dir / "best.pt"  # change if your filename differs
+        mri_model_path = base_models_dir / "best_model.keras"
         logger.info(f"Loading MRI FCD service from: {mri_model_path}")
 
         app.state.mri_service = MRIFCDInferenceService(
-            model_pt_path=str(mri_model_path),
-            img_size=192,
-            base_ch=16,
+            model_path=str(mri_model_path),
         )
         logger.info("MRI FCD service loaded and ready.")
     except Exception as e:
