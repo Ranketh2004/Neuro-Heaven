@@ -7,6 +7,7 @@ from src.routes.epi_diagnosis import epi_router
 from src.routes.auth.route import router as auth_router
 from src.services.soz_inference_service import SOZInferenceService
 from src.services.mri_inference_service import MRIFCDInferenceService
+from src.services.asm_prediction_service import ASMPredictionService
 from src.config.database import MongoDatabase
 
 # Configure logging
@@ -80,6 +81,18 @@ def load_soz_and_mri_services():
         logger.info("MRI FCD service loaded and ready.")
     except Exception as e:
         logger.error(f"Failed to load MRI service: {e}. MRI endpoint will not work.")
+
+    # -------- ASM Prediction --------
+    try:
+        asm_model_path = base_models_dir / "asm_response_prediction.pkl"
+        logger.info(f"Loading ASM prediction service from: {asm_model_path}")
+
+        app.state.asm_service = ASMPredictionService(
+            model_path=str(asm_model_path),
+        )
+        logger.info("ASM prediction service loaded and ready.")
+    except Exception as e:
+        logger.error(f"Failed to load ASM prediction service: {e}. ASM endpoint will not work.")
 
 
 @app.on_event("startup")
