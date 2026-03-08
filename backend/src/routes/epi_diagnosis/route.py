@@ -18,7 +18,7 @@ import traceback
 epi_router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@epi_router.post("/predict")
+@epi_router.post("/epilepsy/predict")
 async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
     temp_filepath = None
 

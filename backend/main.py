@@ -37,7 +37,7 @@ app.add_middleware(
 )
 app.include_router(
     epi_router,
-    prefix="/epilepsy_diagnosis",
+    prefix="/epilepsy_diagnosis", 
     tags=["Epilepsy Diagnosis"]
 )
 app.include_router(

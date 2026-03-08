@@ -183,22 +183,33 @@ footer {{visibility: hidden;}}
 header[data-testid="stHeader"] {{ display: none !important; }}
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !important; }}
-{"section[data-testid='stSidebar']{display:block !important;}" if token else "section[data-testid='stSidebar']{display:none !important;}"}
+{"" if token else "section[data-testid='stSidebar']{display:none !important;} [data-testid='collapsedControl']{display:none !important;}"}
+
+/* Hide the collapse (<<) button inside the sidebar when logged in */
+{"[data-testid='stSidebarCollapseButton'], section[data-testid='stSidebar'] button[kind='header']{ display:none !important; }" if token else ""}
+
+/* Force sidebar to always stay visible when logged in (overrides Chrome cached collapsed state) */
+{"section[data-testid='stSidebar']{ transform: none !important; min-width: 244px !important; visibility: visible !important; } [data-testid='collapsedControl']{ display:none !important; }" if token else ""}
 
 section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, #20A0D8 0%, #0E5C7A 100%) !important;
   border-right: 1px solid rgba(255,255,255,0.08);
+  top: 0 !important;
+  height: 100vh !important;
+  position: fixed !important;
 }}
 section[data-testid="stSidebar"] > div {{
   padding-top: 0 !important;
-  height: 100vh !important;
+  overflow: visible !important;
+  height: 100% !important;
 }}
 section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
-  height: 100vh !important;
+  height: 100% !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
-  padding: 0.01rem 0.95rem 0.95rem 0.95rem !important;
+  overflow: visible !important;
+  padding: 1.1rem 0.95rem 0.95rem 0.95rem !important;
+  box-sizing: border-box !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
 
@@ -210,6 +221,7 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
   padding: 0 0 0.7rem 0;
   margin-bottom: 0.75rem;
   border-bottom: 1px solid rgba(255,255,255,0.14);
+  overflow: visible !important;
 }}
 .sb-logo {{
   width: 60px;
@@ -221,9 +233,11 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
 .sb-brand-name {{
   color:#fff;
   font-weight: 900;
-  letter-spacing: 0.10em;
-  font-size: 1.45rem;
+  letter-spacing: 0.05em;
+  font-size: 1.25rem;
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: visible !important;
 }}
 
 .nav-shell {{
