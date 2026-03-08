@@ -194,21 +194,17 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !i
 section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, #20A0D8 0%, #0E5C7A 100%) !important;
   border-right: 1px solid rgba(255,255,255,0.08);
-  top: 0 !important;
-  height: 100vh !important;
-  position: fixed !important;
 }}
 section[data-testid="stSidebar"] > div {{
   padding-top: 0 !important;
   overflow: visible !important;
-  height: 100% !important;
 }}
 section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
-  height: 100% !important;
+  height: 100vh !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: visible !important;
-  padding: 1.1rem 0.95rem 0.95rem 0.95rem !important;
+  padding: 1.2rem 0.95rem 0.95rem 0.95rem !important;
   box-sizing: border-box !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
