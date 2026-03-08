@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from pydantic import BaseModel
 import io
 import base64
 import numpy as np
@@ -10,7 +11,7 @@ import matplotlib.pyplot as plt
 import logging
 import os
 import tempfile
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 import traceback
 
 
@@ -116,6 +117,69 @@ async def predict_soz(request: Request, file: UploadFile = File(...)) -> Dict[st
 @epi_router.get("/health")
 async def health_check() -> Dict[str, str]:
     return {"status": "ok"}
+
+
+# =========================
+# ASM Response Prediction
+# POST /epilepsy_diagnosis/asm/predict
+# =========================
+class ASMPredictionRequest(BaseModel):
+    age: Optional[int] = None
+    age_of_onset: Optional[int] = None
+    pretreatment_seizure_count: Optional[int] = None
+    prior_asm_exposure_count: Optional[int] = None
+
+    sex: Optional[str] = None
+    seizure_type: Optional[str] = None
+    current_asm: Optional[str] = None
+    mri_lesion_type: Optional[str] = None
+    eeg_status_detail: Optional[str] = None
+
+    psychiatric_disorder: Optional[str] = None
+    intellectual_disability: Optional[str] = None
+    cerebrovascular_disease: Optional[str] = None
+    head_trauma: Optional[str] = None
+    cns_infection: Optional[str] = None
+    substance_alcohol_abuse: Optional[str] = None
+    family_history: Optional[str] = None
+
+
+class ASMPredictionResponse(BaseModel):
+    pred_label: int
+    result_text: str
+    prob_final: float
+    clinician_summary: str
+    applicability_indicator: int
+    shap: Dict[str, Any] = {}
+    ml_details: Dict[str, Any] = {}
+
+
+@epi_router.post("/asm/predict", response_model=ASMPredictionResponse)
+async def predict_asm_response(request: Request, body: ASMPredictionRequest):
+    """Predict ASM treatment response (seizure freedom at 12 months)."""
+    try:
+        if not hasattr(request.app.state, "asm_service"):
+            raise HTTPException(
+                status_code=500,
+                detail="ASM prediction service not loaded. Check app startup logs.",
+            )
+
+        patient_dict = body.model_dump()
+
+        # Strip placeholder values coming from the frontend
+        for k, v in patient_dict.items():
+            if isinstance(v, str) and v.strip().lower() in {"select", "select an option"}:
+                patient_dict[k] = None
+
+        result = request.app.state.asm_service.predict(patient_dict)
+
+        return ASMPredictionResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ASM prediction error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 
 # -----------------------------
