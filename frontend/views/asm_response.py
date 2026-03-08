@@ -3,7 +3,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from textwrap import dedent
 
-from utils.asm_predictor import get_artifacts, predict
+from utils.api_client import post, APIError
 
 
 def _init_state():
@@ -121,11 +121,8 @@ def render():
 
     MODEL_PATH = "models/asm_response_prediction.pkl"
 
-    try:
-        artifacts = get_artifacts(MODEL_PATH)
-    except Exception as e:
-        st.error(f"Model could not be loaded: {e}")
-        return
+    # ASM options — hardcoded fallback since model is on backend
+    trained_asms = []
 
     # CSS/theme - keep in main page (not iframe)
     st.markdown(
@@ -205,7 +202,7 @@ def render():
         eeg_opts = [SELECT, "Generalized", "Focal", "Normal", "Multifocal"]
         yn_opts = [SELECT, "Yes", "No"]
 
-        trained_asms = artifacts.get("available_asms") or []
+        trained_asms = []
         if trained_asms:
             asm_opts = [SELECT] + sorted(list(set(map(str, trained_asms))))
         else:
@@ -339,7 +336,10 @@ def render():
                 return
 
             try:
-                out = predict(sample_patient, artifacts)
+                out = post("/epilepsy_diagnosis/asm/predict", sample_patient)
+            except APIError as e:
+                st.error(f"Prediction failed: {e}")
+                return
             except Exception as e:
                 st.error(f"Prediction failed: {e}")
                 return
