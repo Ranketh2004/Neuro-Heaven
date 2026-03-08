@@ -237,14 +237,32 @@ def render():
 
                         data = resp.json()
                         img_b64 = data.get("image_b64")
-                        stats = data.get("stats")
+                        stats = data.get("stats", {})
 
-                        if img_b64:
-                            img_bytes = base64.b64decode(img_b64)
-                            st.image(img_bytes, caption="FCD overlay (backend)", use_container_width=True)
+                        prediction = stats.get("prediction", "N/A")
+                        probability = stats.get("fcd_probability", 0.0)
+
+                        # Prediction result banner
+                        if probability >= 0.5:
+                            st.error(f"**{prediction}** — Probability: {probability:.2%}")
+                        else:
+                            st.success(f"**{prediction}** — Probability: {probability:.2%}")
+
+                        mri_b64 = data.get("mri_b64")
+
+                        if img_b64 or mri_b64:
+                            col_mri, col_cam = st.columns(2)
+                            if mri_b64:
+                                with col_mri:
+                                    mri_bytes = base64.b64decode(mri_b64)
+                                    st.image(mri_bytes, caption="MRI Brain (detected region circled)", use_container_width=True)
+                            if img_b64:
+                                with col_cam:
+                                    img_bytes = base64.b64decode(img_b64)
+                                    st.image(img_bytes, caption="Grad-CAM Explanation", use_container_width=True)
 
                         if stats:
-                            st.markdown("### Prediction stats")
+                            st.markdown("### Prediction Details")
                             st.json(stats)
 
                     except requests.exceptions.RequestException as e:
