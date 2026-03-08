@@ -7,7 +7,7 @@ BACKEND_URL = "http://127.0.0.1:8000"
 SOZ_ENDPOINT = f"{BACKEND_URL}/epilepsy_diagnosis/soz/predict"
 
 def render():
-    mode_param = st.query_params.get("mode", ["upload"])
+    mode_param = st.query_params.get("soz_mode", ["upload"])
     mode = mode_param[0] if isinstance(mode_param, list) else mode_param
 
     if "uploader_version" not in st.session_state:
@@ -106,7 +106,7 @@ def render():
         if mode == "results":
             st.markdown('<div class="soz-wrapper results">', unsafe_allow_html=True)
             st.markdown('<div class="nh-title">Seizure Onset Zone (SOZ) Likelihood Analysis</div>', unsafe_allow_html=True)
-            uploaded_name = st.session_state.get("uploaded_file_name", "example.edf")
+            uploaded_name = st.session_state.get("soz_uploaded_file_name", "example.edf")
             st.markdown(f'<div class="nh-sub">File analyzed: <strong>{uploaded_name}</strong></div>', unsafe_allow_html=True)
 
             data = st.session_state.get("soz_result", None)
@@ -184,13 +184,13 @@ def render():
 
             if st.button("Upload another EEG", type="secondary"):
                 try:
-                    st.query_params = {"page": "soz", "mode": "upload"}
+                    st.query_params = {"page": "soz", "soz_mode": "upload"}
                 except Exception:
                     try:
-                        st.experimental_set_query_params(page="soz", mode="upload")
+                        st.experimental_set_query_params(page="soz", soz_mode="upload")
                     except Exception:
                         pass
-                st.session_state.pop("uploaded_file_name", None)
+                st.session_state.pop("soz_uploaded_file_name", None)
                 st.session_state["uploader_version"] += 1
                 st.rerun()
 
@@ -245,7 +245,7 @@ def render():
                 )
 
             if uploaded is not None:
-                st.session_state["uploaded_file_name"] = uploaded.name
+                st.session_state["soz_uploaded_file_name"] = uploaded.name
                 try:
                     st.toast("Uploading to backend…", icon="🧠")
                 except Exception:
@@ -267,10 +267,10 @@ def render():
                         pass
 
                     try:
-                        st.query_params = {"page": "soz", "mode": "results"}
+                        st.query_params = {"page": "soz", "soz_mode": "results"}
                     except Exception:
                         try:
-                            st.experimental_set_query_params(page="soz", mode="results")
+                            st.experimental_set_query_params(page="soz", soz_mode="results")
                         except Exception:
                             pass
                     st.rerun()

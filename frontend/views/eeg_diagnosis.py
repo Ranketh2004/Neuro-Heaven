@@ -63,13 +63,13 @@ def display_binary_dashboard(predictions, window_size=5):
 # -----------------------------
 def render():
     API_URL = "http://localhost:8000"
-    PREDICT_ENDPOINT = f"{API_URL}/epilepsy_diagnosis/predict"
+    PREDICT_ENDPOINT = f"{API_URL}/epilepsy_diagnosis/epilepsy/predict"
     MAX_MB = 30
 
     # -----------------------------
     # State (SOZ pattern)
     # -----------------------------
-    mode_param = st.query_params.get("mode", ["upload"])
+    mode_param = st.query_params.get("eeg_mode", ["upload"])
     mode = mode_param[0] if isinstance(mode_param, list) else mode_param
 
     if "uploader_version" not in st.session_state:
@@ -78,7 +78,7 @@ def render():
     # store results in session_state so results page can render
     st.session_state.setdefault("dx_result", None)
     st.session_state.setdefault("dx_processing_time", None)
-    st.session_state.setdefault("uploaded_file_name", None)
+    st.session_state.setdefault("dx_uploaded_file_name", None)
 
     # -----------------------------
     # CSS (SOZ pattern)
@@ -156,7 +156,7 @@ def render():
             st.markdown('<div class="dx-wrapper">', unsafe_allow_html=True)
 
             st.markdown('<div class="nh-title">Epilepsy Diagnosis</div>', unsafe_allow_html=True)
-            fname = st.session_state.get("uploaded_file_name") or "uploaded file"
+            fname = st.session_state.get("dx_uploaded_file_name") or "uploaded file"
             st.markdown(f'<div class="nh-sub">File analyzed: <strong>{fname}</strong></div>', unsafe_allow_html=True)
 
             result = st.session_state.get("dx_result") or {}
@@ -208,12 +208,12 @@ def render():
             # Back button
             if st.button("Upload another EEG", type="secondary"):
                 try:
-                    st.query_params = {"page": "epilepsy_diagnosis", "mode": "upload"}
+                    st.query_params = {"page": "eeg", "eeg_mode": "upload"}
                 except Exception:
                     pass
                 st.session_state["dx_result"] = None
                 st.session_state["dx_processing_time"] = None
-                st.session_state["uploaded_file_name"] = None
+                st.session_state["dx_uploaded_file_name"] = None
                 st.session_state["uploader_version"] += 1
                 st.rerun()
 
@@ -311,14 +311,14 @@ def render():
 
         # Test path: set session + route to results
         if test_button:
-            st.session_state["uploaded_file_name"] = uploaded_file.name
+            st.session_state["dx_uploaded_file_name"] = uploaded_file.name
             st.session_state["dx_processing_time"] = 0.00
             st.session_state["dx_result"] = {
                 "prediction": 1,
                 "predictions": [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             }
             try:
-                st.query_params = {"page": "epilepsy_diagnosis", "mode": "results"}
+                st.query_params = {"page": "eeg", "eeg_mode": "results"}
             except Exception:
                 pass
             st.rerun()
@@ -334,12 +334,12 @@ def render():
                     processing_time = time.time() - start_time
 
                     if response.status_code == 200:
-                        st.session_state["uploaded_file_name"] = uploaded_file.name
+                        st.session_state["dx_uploaded_file_name"] = uploaded_file.name
                         st.session_state["dx_processing_time"] = processing_time
                         st.session_state["dx_result"] = response.json()
 
                         try:
-                            st.query_params = {"page": "epilepsy_diagnosis", "mode": "results"}
+                            st.query_params = {"page": "eeg", "eeg_mode": "results"}
                         except Exception:
                             pass
                         st.rerun()
