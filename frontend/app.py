@@ -181,6 +181,9 @@ CSS = f"""
 MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 header[data-testid="stHeader"] {{ display: none !important; }}
+.block-container {{
+    padding-top: 0rem !important;
+}}
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !important; }}
 {"" if token else "section[data-testid='stSidebar']{display:none !important;} [data-testid='collapsedControl']{display:none !important;}"}
