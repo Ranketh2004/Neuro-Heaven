@@ -154,6 +154,29 @@ class ASMPredictionResponse(BaseModel):
     ml_details: Dict[str, Any] = {}
 
 
+class ASMRankingEntry(BaseModel):
+    asm: str
+    prob_adjusted: float
+    prob_base: float
+    penalty: float
+    rule_notes: List[str] = []
+    caution_notes: List[str] = []
+    benefit_notes: List[str] = []
+    pred_label: int
+    tier: str = ""
+    spectrum: str = ""
+    teratogenic_risk: str = ""
+    monitoring: str = ""
+    suitability: str = ""  # "preferred" | "acceptable" | "caution" | "avoid"
+
+
+class ASMRankingResponse(BaseModel):
+    rankings: List[ASMRankingEntry]
+    prob_base: float
+    reliability_flags: List[str] = []
+    applicability_indicator: int
+
+
 @epi_router.post("/asm/predict", response_model=ASMPredictionResponse)
 async def predict_asm_response(request: Request, body: ASMPredictionRequest):
     """Predict ASM treatment response (seizure freedom at 12 months)."""
@@ -180,6 +203,33 @@ async def predict_asm_response(request: Request, body: ASMPredictionRequest):
     except Exception as e:
         logger.error(f"ASM prediction error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+
+@epi_router.post("/asm/rank", response_model=ASMRankingResponse)
+async def rank_asm_options(request: Request, body: ASMPredictionRequest):
+    """Rank all available ASMs by rule-adjusted seizure-freedom probability for a patient."""
+    try:
+        if not hasattr(request.app.state, "asm_service"):
+            raise HTTPException(
+                status_code=500,
+                detail="ASM prediction service not loaded. Check app startup logs.",
+            )
+
+        patient_dict = body.model_dump()
+
+        for k, v in patient_dict.items():
+            if isinstance(v, str) and v.strip().lower() in {"select", "select an option"}:
+                patient_dict[k] = None
+
+        result = request.app.state.asm_service.rank_asms(patient_dict)
+
+        return ASMRankingResponse(**result)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ASM ranking error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Ranking failed: {str(e)}")
 
 
 # -----------------------------
