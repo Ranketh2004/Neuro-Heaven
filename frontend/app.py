@@ -207,7 +207,7 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
   display: flex !important;
   flex-direction: column !important;
   overflow: visible !important;
-  padding: 1.2rem 0.95rem 0.95rem 0.95rem !important;
+  padding: -0.5rem 0.95rem 0.95rem 0.95rem !important;
   box-sizing: border-box !important;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
