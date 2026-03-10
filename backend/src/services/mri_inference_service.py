@@ -112,7 +112,7 @@ class MRIFCDInferenceService:
         overlay = self._overlay_heatmap(flair_channel, heatmap)
         overlay_b64 = self._array_to_b64_png(overlay)
 
-        # Full brain slice with detected region circled
+        # Full brain slice with detection region circled (only if FCD detected)
         info = meta["slice_info"][max_idx]
         flair3d = meta["flair3d_normed"]          # (H, W, D), already 0-1
         full_slice = flair3d[:, :, info["z"]]     # full axial slice
@@ -120,10 +120,13 @@ class MRIFCDInferenceService:
         # Convert to RGB uint8
         full_u8 = (full_slice * 255).astype(np.uint8)
         full_rgb = cv2.cvtColor(full_u8, cv2.COLOR_GRAY2BGR)
-        # Draw circle around the patch centre
-        cy, cx = info["cy"], info["cx"]
-        radius = PATCH_SIZE // 2
-        cv2.circle(full_rgb, (cx, cy), radius, (0, 255, 0), 2)
+        
+        # Only draw circle if FCD is detected (probability >= 0.5)
+        if max_prob >= 0.5:
+            cy, cx = info["cy"], info["cx"]
+            radius = PATCH_SIZE // 2
+            cv2.circle(full_rgb, (cx, cy), radius, (0, 255, 0), 2)
+        
         # Convert BGR→RGB for PIL
         full_rgb = cv2.cvtColor(full_rgb, cv2.COLOR_BGR2RGB)
         mri_b64 = self._array_to_b64_png(full_rgb.astype(np.float32) / 255.0)
