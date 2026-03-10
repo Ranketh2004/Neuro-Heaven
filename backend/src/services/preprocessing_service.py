@@ -1,168 +1,95 @@
-import sys
-from pathlib import Path
-
-# Add project root to Python path
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
 import numpy as np
-import mne 
-import torch
-from mne.preprocessing import ICA
-from mne.decoding import Scaler
-from autoreject import AutoReject
-from sklearn.preprocessing import RobustScaler
+import mne
 
-from models.autoencoder import AutoEncoder, Encoder, Decoder
+class Preprocess:
 
-#from src.helper.logger import get_logger
-import warnings
+    def __init__(self):
+        self.channels = ['T3', 'T4', 'F3', 'F4', 'C3', 'C4', 'O1', 'O2', 'A1', 'A2']
 
-warnings.filterwarnings("ignore")
-
-# logger = get_logger(__name__)
-
-class EEGPreprocessor:
-
-    def __init__(self, 
-                 target_sfreq=250, 
-                 l_freq=1.0, 
-                 h_freq=40.0,
-                 notch_freq=[60, 120],
-                 reference='average',
-                 epoch_length=2,
-                 overlap=0.0
-                 ):
-        
-        self.target_sfreq = target_sfreq
-        self.l_freq = l_freq
-        self.h_freq = h_freq
-        self.notch_freq = notch_freq
-        self.reference = reference
-        self.epoch_length = epoch_length
-        self.overlap = overlap
-
-        # common EEG channels according to 10-20 system of electrode placement
-        self.common_channels = [
-            'FP1','FP2','F3','F4','C3','C4','P3','P4','O1','O2',
-            'F7','F8','T5','T6','FZ','PZ'
-        ]
-
-    def pick_common_channels(self, raw):
-        
-        #rename channel names in .edf file
+    def pick_common_channels(self, raw_obj):
         mapping = {ch: ch.replace("EEG ", "").replace("-LE", "").replace(" ","").replace("-REF", "") 
-                   for ch in raw.ch_names}
-        raw.rename_channels(mapping)
-
-        #pick only relevant channels
-        picked_channels = [ch for ch in raw.info['ch_names'] if ch in self.common_channels]
-
-        if len(picked_channels) < len(self.common_channels):
-            missing = set(self.common_channels) - set(picked_channels)
-            print(f"Warning: Missing channels - {missing}")
+                   for ch in raw_obj.ch_names}
         
-        raw.pick(picked_channels)
+        raw_obj.rename_channels(mapping)
 
-        return raw
+        picked_channels = [ch for ch in raw_obj.info['ch_names'] if ch in self.channels]
+        if (len(picked_channels) < len(self.channels)):
+            missing = set(self.channels) - set(picked_channels)
+            print(f'Missing channels: {missing}')   
 
-    def downsample(self, raw):
-        
-        original_sfreq = raw.info['sfreq']
-        if original_sfreq > self.target_sfreq:
-            raw.resample(self.target_sfreq)
-        
-        return raw
+        raw_obj.pick_channels(picked_channels)
+        # Reorder the 8 core channels; keep A1/A2 at the end if present (needed for referencing)
+        core_order = ['F3', 'F4', 'C3', 'C4', 'O1', 'O2', 'T3', 'T4']
+        ref_present = [ch for ch in ['A1', 'A2'] if ch in raw_obj.ch_names]
+        raw_obj.reorder_channels(core_order + ref_present)
+        return raw_obj
     
-    def set_montage(self, raw):
+    def set_montage(self, raw_obj):
 
-        # ch names as in the standard 10-20 system
-        montage_ch_names = ['Fp1','Fp2','F3','F4', 'C3', 'C4', 'P3', 'P4',
-                            'O1', 'O2', 'F7', 'F8', 'T5', 'T6', 'Fz','Pz']
-        
-        channels = {ch: c for c in montage_ch_names for ch in raw.info['ch_names'] if ch.lower() == c.lower()}
-        raw.rename_channels(channels)
+        channels = {ch: c for c in self.channels for ch in raw_obj.info['ch_names'] if ch.lower() == c.lower()}
+        raw_obj.rename_channels(channels)
 
         montage = mne.channels.make_standard_montage('standard_1020')
-        raw.set_montage(montage, on_missing='warn', verbose=False)
+        raw_obj.set_montage(montage, match_case=False, on_missing='ignore')
+        return raw_obj
     
-        return raw
+    def bandpass_filter(self, 
+                        raw_obj, 
+                        l_freq=0.5, 
+                        h_freq=40.0
+                        ):
+        raw_obj.filter(l_freq=l_freq, h_freq=h_freq, fir_design='firwin', verbose=False, picks='eeg')
+        return raw_obj
     
-    def notch_filter(self, raw):
+    def notch_filter(self, raw_obj):
+        raw_obj.notch_filter(freqs=[60.0, 120.0], picks='eeg', verbose=False)
+        return raw_obj
+    
+    def reference(self, raw_obj, ref_channels=['A1', 'A2']):
+        available_refs = [ch for ch in ref_channels if ch in raw_obj.ch_names]
+        if available_refs:
+            raw_obj.set_eeg_reference(ref_channels=available_refs)
+            raw_obj.drop_channels(available_refs)
+        else:
+            # Fallback: average reference when A1/A2 are not in the recording
+            print(f"Reference channels {ref_channels} not found — using average reference instead.")
+            raw_obj.set_eeg_reference(ref_channels='average', verbose=False)
+        return raw_obj
+    
+    def normalize(self, raw_obj):
 
-        raw.notch_filter(freqs=self.notch_freq, picks='eeg', verbose=False)
-        return raw
-    
-    def bandpass_filter(self, raw):
+        data = raw_obj.get_data()
+        mu = np.mean(data, axis=1, keepdims=True)
+        sigma = np.std(data, axis=1, keepdims=True)
 
-        raw.filter(l_freq=self.l_freq,
-                   h_freq=self.h_freq,
-                   fir_design='firwin',
-                   picks='eeg')
+        norm_data = (data - mu) / (sigma + 1e-10)
+        raw_obj._data = norm_data
+
+        return raw_obj
+    
+    def create_epochs(self, raw_obj, epoch_length=6.0):
+        total_duration = raw_obj.times[-1]
+        n_epochs = int(total_duration // epoch_length)
+
+        epochs = []
+        for i in range(n_epochs):
+            tmin = i * epoch_length
+            tmax = tmin + epoch_length
+            epoch_data = raw_obj.copy().crop(tmin=tmin, tmax=tmax, include_tmax=False).get_data()
+            epochs.append(epoch_data)
+
+        return epochs
+
+    def preprocess(self, raw_obj):
         
-        return raw
-    
-    
-    def rereference(self, raw):
-
-        raw.set_eeg_reference(ref_channels=self.reference
-                            , projection=False,
-                              verbose=False)
-    
-        return raw
-    
-
-    def run_pipeline(self, file_path):
-
-        raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
-
-        raw_1 = self.pick_common_channels(raw)
-        raw_2 = self.downsample(raw_1)
-        raw_3 = self.set_montage(raw_2)
-        raw_4 = self.notch_filter(raw_3)
-        raw_5 = self.bandpass_filter(raw_4)
-
-        # 2. Create Epochs
-        events = mne.make_fixed_length_events(raw_5, duration=self.epoch_length, overlap=0)
-        epochs = mne.Epochs(
-            raw_5, events, tmin=0, tmax=self.epoch_length - (1 / self.target_sfreq), 
-            baseline=None, preload=True, verbose=False
-        )
-
-        # 6. Scaling
-        scaler = Scaler(info=epochs.info, scalings='mean')
-        X_scaled = scaler.fit_transform(epochs.get_data())
+        #raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
+        raw = self.pick_common_channels(raw_obj)
+        raw = self.set_montage(raw)
+        raw = self.bandpass_filter(raw)
+        raw = self.notch_filter(raw)
+        raw = self.reference(raw)
+        raw = self.normalize(raw)
+        epochs = self.create_epochs(raw)
         
-        return X_scaled
-
-
-if __name__ == "__main__":
-
-    preprocessor = EEGPreprocessor()
-
-    sample_file = 'data/raw/aaaaalim_s001_t001.edf'  
-
-    processed_data = preprocessor.run_pipeline(sample_file)
-    print(f'Processed data shape: {processed_data.shape}')
-
-    processed_tensor = torch.from_numpy(processed_data).float()
-    print(f'Processed tensor shape: {processed_tensor.shape}')
-
-    model_path = 'src/models/eeg_autoencoder.pth'
-    #autoencoder = AutoEncoder(channels=16, latent_dim=16, target_length=500)
-    torch.serialization.add_safe_globals([AutoEncoder, Encoder, Decoder])
-    #autoencoder.load_state_dict(torch.load(model_path, map_location=torch.device('cpu'), weights_only=False))
-
-    autoencoder = torch.load(model_path, map_location=torch.device('cpu'), weights_only=False)
-
-    autoencoder.eval()
-
-    with torch.no_grad():
-        _, z = autoencoder(processed_tensor)
-        print(f'Latent representation shape: {z.shape}')
-        print(f'Latent representation: {z}')
-
-
-    
-
+        return epochs
 
