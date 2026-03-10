@@ -5,34 +5,43 @@ import numpy as np
 import plotly.graph_objects as go
 from textwrap import dedent
 
-# -----------------------------
-# Keep your dashboard function as-is
-# -----------------------------
-def display_binary_dashboard(predictions, window_size=5):
-    st.subheader("Patient Diagnostic Summary")
+
+EPOCH_LENGTH_SECONDS = 6 
+
+def display_binary_dashboard(predictions, window_size=EPOCH_LENGTH_SECONDS):
+    st.markdown(
+        '<p style="font-size:1.1rem;font-weight:700;color:#1E3A5F;margin:1.4rem 0 0.6rem 0;">'
+        'Seizure Event Summary</p>',
+        unsafe_allow_html=True
+    )
 
     total_epochs = len(predictions)
     seizure_epochs = sum(predictions)
     seizure_seconds = seizure_epochs * window_size
-    seizure_load = (seizure_epochs / total_epochs) * 100 if total_epochs else 0.0
 
-    is_epileptic = seizure_epochs >= 2  # simple rule
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        color = "inverse" if is_epileptic else "normal"
-        st.metric(
-            "Patient Status",
-            "SEIZURE" if is_epileptic else "NORMAL",
-            delta="Alert" if is_epileptic else "Clear",
-            delta_color=color
-        )
-    with col2:
-        st.metric("Total Seizure Time", f"{seizure_seconds}s")
-    with col3:
-        st.metric("Seizure Load", f"{seizure_load:.1f}%", help="Percentage of recording flagged as seizure")
-
-    st.subheader("Temporal Detection Map")
+    st.markdown(
+        f"""
+        <div style="display:flex;gap:1rem;margin-bottom:1.2rem;">
+            <div style="flex:1;background:linear-gradient(135deg,#FEF2F2,#FEE2E2);
+                        border:1px solid #FECACA;border-radius:12px;padding:1.1rem 1.3rem;">
+                <p style="margin:0 0 0.2rem 0;color:#991B1B;font-size:0.82rem;font-weight:600;
+                          text-transform:uppercase;letter-spacing:0.05em;">⚡ Seizure Events</p>
+                <p style="margin:0;font-size:2.2rem;font-weight:800;color:#DC2626;">{seizure_epochs}</p>
+                <p style="margin:0.25rem 0 0 0;color:#7F1D1D;font-size:0.78rem;">
+                    out of {total_epochs} total epochs analyzed</p>
+            </div>
+            <div style="flex:1;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);
+                        border:1px solid #BFDBFE;border-radius:12px;padding:1.1rem 1.3rem;">
+                <p style="margin:0 0 0.2rem 0;color:#1E3A8A;font-size:0.82rem;font-weight:600;
+                          text-transform:uppercase;letter-spacing:0.05em;">⏱ Total Seizure Duration</p>
+                <p style="margin:0;font-size:2.2rem;font-weight:800;color:#1D4ED8;">{seizure_seconds}s</p>
+                <p style="margin:0.25rem 0 0 0;color:#1E3A5F;font-size:0.78rem;">
+                    {window_size}s per epoch &times; {seizure_epochs} seizure epochs</p>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     time_axis = np.arange(len(predictions)) * window_size
 
@@ -66,9 +75,6 @@ def render():
     PREDICT_ENDPOINT = f"{API_URL}/epilepsy_diagnosis/epilepsy/predict"
     MAX_MB = 30
 
-    # -----------------------------
-    # State (SOZ pattern)
-    # -----------------------------
     mode_param = st.query_params.get("eeg_mode", ["upload"])
     mode = mode_param[0] if isinstance(mode_param, list) else mode_param
 
@@ -80,12 +86,9 @@ def render():
     st.session_state.setdefault("dx_processing_time", None)
     st.session_state.setdefault("dx_uploaded_file_name", None)
 
-    # -----------------------------
-    # CSS (SOZ pattern)
-    # -----------------------------
+  
     css = """
     <style>
-        /* --- MOVE EVERYTHING UP --- */
         .block-container{
             padding-top: 0rem !important;
             padding-bottom: 0rem !important;
@@ -102,9 +105,9 @@ def render():
         }
 
         /* Tighten title/subtitle spacing */
-        .dx-wrapper{ padding: 0rem 0 1rem !important; }
-        .nh-title{ margin-top: -0.6rem !important; }
-        .nh-sub{ margin-top: -0.6rem !important; margin-bottom: 0.2rem !important; }
+        .dx-wrapper{ padding: 0.5rem 0 1.5rem !important; }
+        .nh-title{ margin-top: -0.6rem !important; margin-bottom: 0.1rem !important; }
+        .nh-sub{ margin-top: 0 !important; margin-bottom: 0.6rem !important; }
 
         div[data-testid="column"] { padding-left: 1rem; padding-right: 1rem; }
 
@@ -114,7 +117,7 @@ def render():
         .nh-sub { color:#49576B; margin-top:-0.4rem; }
 
         .upload-card { background: #FFFFFF; }
-        .upload-area { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 0.4rem; padding: 0.5rem 0.6rem 0.7rem; }
+        .upload-area { display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 0.6rem; padding: 0.7rem 0.8rem 0.9rem; }
 
         .upload-header { display:flex; align-items:center; gap:0.6rem; margin-bottom:0.25rem; }
         .upload-icon { width:26px; height:26px; border-radius:999px; background:#EDF5FF; color:#356AC3; display:flex; align-items:center; justify-content:center; font-size:0.9rem; border:1px solid #CFE2FF; }
@@ -126,7 +129,7 @@ def render():
         .list { margin:0; padding-left: 1.1rem; color:#3B556E; }
         .list li { margin-bottom: 0.25rem; }
 
-        .info-card { margin-top: 0.4rem; background:#F9FCFF; border:1px solid #E6EEF8; border-radius:12px; padding:0.6rem; }
+        .info-card { margin-top: 0.6rem; background:#F9FCFF; border:1px solid #E6EEF8; border-radius:12px; padding:0.75rem 0.85rem; }
         .info-title { font-weight:700; color:#1E3A5F; margin-bottom:0.35rem; font-size:0.98rem; }
         .info-list { margin:0; padding-left: 1.1rem; color:#3B556E; }
         .info-list li { margin-bottom: 0.25rem; }
@@ -149,9 +152,6 @@ def render():
     with mid:
         st.markdown('<div class="dx-page">', unsafe_allow_html=True)
 
-        # -----------------------------
-        # RESULTS MODE (SOZ-style)
-        # -----------------------------
         if mode == "results":
             st.markdown('<div class="dx-wrapper">', unsafe_allow_html=True)
 
@@ -162,29 +162,46 @@ def render():
             result = st.session_state.get("dx_result") or {}
             processing_time = st.session_state.get("dx_processing_time")
 
-            prediction = result.get("prediction", None)
-            predictions = result.get("predictions", None)
+            epoch_predictions = result.get("epoch_predictions", [])
+            seizure_epochs = result.get("seizure_epochs", None)
+            total_epochs = result.get("total_epochs", None)
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
+            if seizure_epochs is not None and total_epochs is not None:
+                _pct = round(seizure_epochs / total_epochs * 100, 1) if total_epochs else 0.0
 
-            if prediction == 1:
+                if _pct <= 2:
+                    _bg, _border, _accent = "#D1FAE5", "#059669", "#059669"
+                    _advice = (
+                        "No seizure-like activity was identified in this recording. "
+                        "If clinical suspicion remains, consider prolonged or ambulatory EEG monitoring."
+                    )
+                elif _pct <= 10:
+                    _bg, _border, _accent = "#FEF9C3", "#CA8A04", "#92400E"
+                    _advice = (
+                        "A low proportion of seizure-like activity was detected. "
+                        "Correlate with clinical history and semiology. "
+                        "Consider repeat or prolonged EEG if findings are inconclusive."
+                    )
+                elif _pct > 10:
+                    _bg, _border, _accent = "#FFEDD5", "#EA580C", "#9A3412"
+                    _advice = (
+                        "A high proportion of seizure-like activity was detected. "
+                        "Urgent neurological evaluation is advised. "
+                        "Consider immediate clinical correlation and appropriate anti-seizure management."
+                    )
+                
+
                 st.markdown(
-                    """
-                    <div style="background-color:#FEE2E2;border-left:4px solid #DC2626;
-                                padding:1rem;border-radius:10px;">
-                        <h4 style="color:#DC2626;margin:0 0 0.3rem 0;">Epilepsy Detected</h4>
-                        <p style="margin:0;color:#991B1B;">The EEG indicates the presence of epilepsy.</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            elif prediction == 0:
-                st.markdown(
-                    """
-                    <div style="background-color:#D1FAE5;border-left:4px solid #059669;
-                                padding:1rem;border-radius:10px;">
-                        <h4 style="color:#059669;margin:0 0 0.3rem 0;">No Epilepsy Detected</h4>
-                        <p style="margin:0;color:#065F46;">The EEG does not indicate epilepsy.</p>
+                    f"""
+                    <div style="background:{_bg};border-left:4px solid {_border};
+                                padding:1.1rem 1.3rem;border-radius:10px;">
+                        <h4 style="color:{_accent};margin:0 0 0.15rem 0;">EEG Seizure Probability</h4>
+                        <p style="font-size:2rem;font-weight:800;color:{_accent};margin:0 0 0.5rem 0;">{_pct}%</p>
+                        <p style="margin:0;color:#374151;font-size:0.93rem;line-height:1.5;">
+                            <strong>Clinical note:</strong> {_advice}
+                            <br/><span style="color:#6B7280;font-size:0.84rem;">This is an AI-assisted screening tool and does not constitute a definitive diagnosis.
+                            All findings should be reviewed by a qualified neurologist.</span>
+                        </p>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -192,20 +209,13 @@ def render():
             else:
                 st.info("No prediction available.")
 
-            if processing_time is not None:
-                st.info(f"Processing time: {processing_time:.2f} seconds")
-
-            st.markdown('</div>', unsafe_allow_html=True)  # card
-
-            # Dashboard
-            if isinstance(predictions, list) and len(predictions) > 0:
-                display_binary_dashboard(predictions, window_size=5)
-            else:
-                # fallback dummy (only if backend doesn't send predictions)
-                dummy = [0, 0, 0, 1, 1, 0, 0, 0, 0, 0]
-                display_binary_dashboard(dummy, window_size=5)
+            # Temporal detection map
+            st.markdown('<div style="margin-top:0.5rem;"></div>', unsafe_allow_html=True)
+            if isinstance(epoch_predictions, list) and len(epoch_predictions) > 0:
+                display_binary_dashboard(epoch_predictions)
 
             # Back button
+            st.markdown('<div style="margin-top:1.2rem;"></div>', unsafe_allow_html=True)
             if st.button("Upload another EEG", type="secondary"):
                 try:
                     st.query_params = {"page": "eeg", "eeg_mode": "upload"}
@@ -221,13 +231,11 @@ def render():
             st.markdown('</div>', unsafe_allow_html=True)  # page
             return
 
-        # -----------------------------
-        # UPLOAD MODE (SOZ-style)
-        # -----------------------------
+        
         st.markdown('<div class="dx-wrapper">', unsafe_allow_html=True)
 
         st.markdown('<div class="nh-title">Epilepsy Diagnosis</div>', unsafe_allow_html=True)
-        st.markdown('<div class="nh-sub">Drag and drop an EEG file or browse. Accepted formats: .edf, .bdf, .set</div>', unsafe_allow_html=True)
+        st.markdown('<div class="nh-sub">Drag and drop an EEG file or browse. Accepted format: .edf &nbsp;&bull;&nbsp; Max file size: 30 MB</div>', unsafe_allow_html=True)
 
         st.markdown('<div class="card upload-card">', unsafe_allow_html=True)
         st.markdown('<div class="upload-area">', unsafe_allow_html=True)
@@ -240,11 +248,11 @@ def render():
                 unsafe_allow_html=True
             )
             st.markdown(
-                f'<div class="upload-meta"><span class="chip">Accepted: EDF, BDF, SET</span><span class="chip">Max {MAX_MB}MB</span><span class="chip">HIPAA-like demo</span></div>',
+                f'<div class="upload-meta"><span class="chip">Accepted: EDF only</span><span class="chip">Max {MAX_MB} MB</span><span class="chip">HIPAA-like demo</span></div>',
                 unsafe_allow_html=True
             )
             st.markdown(
-                '<ul class="list">'
+                '<ul class="list" style="margin-top:0.5rem;">'
                 '<li>Drag a file into the dropzone.</li>'
                 '<li>Or click <em>Browse files</em> to select.</li>'
                 '<li>Files should be anonymized before upload.</li>'
@@ -254,9 +262,10 @@ def render():
             st.markdown(
                 '<div class="info-card"><div class="info-title">Expected EDF Format</div>'
                 '<ul class="info-list">'
-                '<li>Standard European Data Format</li>'
+                '<li>Only <strong>.edf</strong> (European Data Format) files are accepted</li>'
                 '<li>EEG channel recordings</li>'
-                '<li>Typically 10–20 system electrode placement</li>'
+                '<li>Typically 10–20 electrode system placement</li>'
+                '<li>Maximum file size: 30 MB</li>'
                 '<li>Minimum duration: 5 minutes recommended</li>'
                 '</ul></div>',
                 unsafe_allow_html=True
@@ -266,10 +275,10 @@ def render():
             uploader_key = f"eeg_uploader_{st.session_state['uploader_version']}"
             uploaded_file = st.file_uploader(
                 "Upload EEG File",
-                type=["edf", "bdf", "set"],
+                type=["edf"],
                 label_visibility="collapsed",
                 accept_multiple_files=False,
-                help=f"Maximum file size: {MAX_MB}MB",
+                help=f"Accepted format: .edf — Maximum file size: {MAX_MB} MB",
                 key=uploader_key,
             )
 
@@ -277,9 +286,6 @@ def render():
         st.markdown('</div>', unsafe_allow_html=True)  # card
         st.markdown('</div>', unsafe_allow_html=True)  # wrapper
 
-        # -----------------------------
-        # Actions + file info
-        # -----------------------------
         if uploaded_file is None:
             st.info("Please upload an EEG file to begin analysis.")
             st.markdown('</div>', unsafe_allow_html=True)  # page
@@ -289,8 +295,8 @@ def render():
         file_size_mb = uploaded_file.size / (1024 * 1024)
         st.markdown(
             f"""
-            <div class="card" style="margin-top:0.9rem;">
-                <strong>Selected file:</strong> {uploaded_file.name}<br/>
+            <div class="card" style="margin-top:0.7rem;">
+                <strong>Selected file:</strong> {uploaded_file.name}&nbsp;&nbsp;
                 <strong>Size:</strong> {file_size_mb:.2f} MB
             </div>
             """,
@@ -298,7 +304,7 @@ def render():
         )
 
         if file_size_mb > MAX_MB:
-            st.error(f"File size ({file_size_mb:.2f} MB) exceeds {MAX_MB}MB limit.")
+            st.error(f"File size ({file_size_mb:.2f} MB) exceeds {MAX_MB} MB limit.")
             st.markdown('</div>', unsafe_allow_html=True)  # page
             return
 
@@ -310,18 +316,25 @@ def render():
             test_button = st.button("Test Visualization", use_container_width=True)
 
         # Test path: set session + route to results
-        if test_button:
-            st.session_state["dx_uploaded_file_name"] = uploaded_file.name
-            st.session_state["dx_processing_time"] = 0.00
-            st.session_state["dx_result"] = {
-                "prediction": 1,
-                "predictions": [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            }
-            try:
-                st.query_params = {"page": "eeg", "eeg_mode": "results"}
-            except Exception:
-                pass
-            st.rerun()
+        # if test_button:
+        #     st.session_state["dx_uploaded_file_name"] = uploaded_file.name
+        #     st.session_state["dx_processing_time"] = 0.00
+        #     _dummy_preds = [0] * 200
+        #     for _idx in [15, 16, 17, 45, 60, 80, 81, 120, 135, 160, 175, 190]:
+        #         _dummy_preds[_idx] = 1
+        #     _seizure_count = sum(_dummy_preds)   # 12
+        #     _total = len(_dummy_preds)           # 200
+        #     st.session_state["dx_result"] = {
+        #         "final_diagnosis": "Seizure Detected" if _seizure_count > _total / 2 else "No Seizure Detected",
+        #         "epoch_predictions": _dummy_preds,
+        #         "seizure_epochs": _seizure_count,
+        #         "total_epochs": _total,
+        #     }
+        #     try:
+        #         st.query_params = {"page": "eeg", "eeg_mode": "results"}
+        #     except Exception:
+        #         pass
+        #     st.rerun()
 
         # Analyze path: call backend, store + route to results
         if analyze_button:

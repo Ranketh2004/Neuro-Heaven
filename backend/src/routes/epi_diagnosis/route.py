@@ -1,18 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from pydantic import BaseModel
-import io
-import base64
-import numpy as np
-import nibabel as nib
-from PIL import Image
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import logging
 import os
 import tempfile
+import mne
 from typing import Dict, Any, Optional, List
-import traceback
+
+from src.services.epilepsy_pipeline_service import EpilepsyPipeline, CNN_MODEL_PATH, FEATURE_LAYER_NAME
 
 
 epi_router = APIRouter()
@@ -25,59 +19,37 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
     try:
         if not file.filename.endswith('.edf'):
             raise HTTPException(status_code=400, detail="Only EDF files are supported.")
-        
+
         logger.info(f"Processing file: {file.filename}")
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".edf") as temp_file:
-            temp_filepath = temp_file.name
+        # Write upload to a temp file so MNE can read it
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".edf") as tmp:
+            temp_filepath = tmp.name
             content = await file.read()
-            temp_file.write(content)
-            temp_file.flush()
-            logger.info(f"Temporary file created at: {temp_filepath}")
-            logger.info(f"File size: {len(content)} bytes")
+            tmp.write(content)
 
-            # try:
-            #     logger.info("Initializing preprocessor...")
-            #     preprocesser = EEGPreprocessor()
-                
-            #     logger.info("Starting preprocessing pipeline...")
-            #     processed_data = preprocesser.run_pipeline(temp_filepath)
-                
-            #     logger.info(f"Preprocessing completed successfully!")
-            #     logger.info(f"Processed data shape: {processed_data.shape}")
-            #     print(f"Processed data shape: {processed_data.shape}")
-                
-            # except Exception as preprocess_error:
-            #     logger.error(f"Preprocessing failed with error: {preprocess_error}")
-            #     logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            #     raise HTTPException(
-            #         status_code=422, 
-            #         detail=f"Preprocessing error: {str(preprocess_error)}"
-            #     )
+        logger.info(f"Saved temp file ({len(content)} bytes) → {temp_filepath}")
 
-        # Placeholder prediction results
-        prediction = 1
-        predictions = [0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0]
-        
-        logger.info(f"Prediction completed for: {file.filename}")
-        
-        return {
-            "prediction": prediction,
-            "predictions": predictions
-        }
+        # Load EEG with MNE
+        raw = mne.io.read_raw_edf(temp_filepath, preload=True, verbose=False)
+
+        # Run full pipeline: preprocess → spectrograms → CNN features → classifier → diagnosis
+        pipeline = EpilepsyPipeline()
+        result = pipeline.diagnose(raw_obj=raw, layer_name=FEATURE_LAYER_NAME, file_name=file.filename)
+
+        return result
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during prediction: {e}")
+        logger.error(f"Unexpected error during prediction: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing EDF file: {str(e)}")
     finally:
         if temp_filepath and os.path.exists(temp_filepath):
             try:
                 os.unlink(temp_filepath)
-                logger.info(f"Temporary file {temp_filepath} deleted.")
-            except Exception as e:
-                logger.warning(f"Failed to delete temporary file {temp_filepath}: {str(e)}")
+            except Exception as ex:
+                logger.warning(f"Could not delete temp file {temp_filepath}: {ex}")
 
 
 # =========================
