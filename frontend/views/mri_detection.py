@@ -241,12 +241,16 @@ def render():
 
                         prediction = stats.get("prediction", "N/A")
                         probability = stats.get("fcd_probability", 0.0)
+                        
+                        # Define threshold for FCD detection
+                        threshold = 0.5
+                        fcd_detected = probability >= threshold
 
                         # Prediction result banner
-                        if probability >= 0.5:
-                            st.error(f"**{prediction}** — Probability: {probability:.2%}")
+                        if fcd_detected:
+                            st.error(f"**FCD Detected** — Probability: {probability:.2%}")
                         else:
-                            st.success(f"**{prediction}** — Probability: {probability:.2%}")
+                            st.success(f"**No FCD Detected** — Probability: {probability:.2%}")
 
                         mri_b64 = data.get("mri_b64")
 
@@ -255,11 +259,26 @@ def render():
                             if mri_b64:
                                 with col_mri:
                                     mri_bytes = base64.b64decode(mri_b64)
-                                    st.image(mri_bytes, caption="MRI Brain (detected region circled)", use_container_width=True)
+                                    # Show appropriate caption based on detection result
+                                    if fcd_detected:
+                                        caption = "Detected lesion region"
+                                    else:
+                                        caption = "MRI Brain slice analyzed by the model"
+                                    st.image(mri_bytes, caption=caption, use_container_width=True)
+                            
                             if img_b64:
                                 with col_cam:
                                     img_bytes = base64.b64decode(img_b64)
-                                    st.image(img_bytes, caption="Grad-CAM Explanation", use_container_width=True)
+                                    st.image(img_bytes, caption="Grad-CAM attention map (regions analyzed by the model)", use_container_width=True)
+                                    
+                                    # Add explanation about Grad-CAM
+                                    st.markdown(
+                                        '<p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem; line-height: 1.4;">'
+                                        '<strong>Grad-CAM</strong> highlights the regions the model focused on while making the prediction. '
+                                        'It does not necessarily indicate an abnormality.'
+                                        '</p>',
+                                        unsafe_allow_html=True
+                                    )
 
                         if stats:
                             st.markdown("### Prediction Details")

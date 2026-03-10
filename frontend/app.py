@@ -196,7 +196,8 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !i
 
 section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, #20A0D8 0%, #0E5C7A 100%) !important;
-  border-right: 1px solid rgba(255,255,255,0.08);
+  border-right: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: 4px 0 12px rgba(0,0,0,0.1) !important;
 }}
 section[data-testid="stSidebar"] > div {{
   padding-top: 0 !important;
@@ -206,35 +207,36 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
   height: 100vh !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: visible !important;
-  padding: -0.5rem 0.95rem 0.95rem 0.95rem !important;
+  overflow: hidden !important;
+  padding: 1rem 1.25rem !important;
   box-sizing: border-box !important;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
 
 .sb-brand {{
-  display:flex;
-  align-items:center;
-  justify-content:flex-start;
-  gap: 0.85rem;
-  padding: 0 0 0.7rem 0;
-  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0 0 1rem 0;
+  margin-bottom: 1.25rem;
   border-bottom: 1px solid rgba(255,255,255,0.14);
   overflow: visible !important;
-}}
-.sb-logo {{
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
-  object-fit: cover;
   flex-shrink: 0;
 }}
+.sb-logo {{
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}}
 .sb-brand-name {{
-  color:#fff;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  font-size: 1.25rem;
-  text-transform: uppercase;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 1.2rem;
   white-space: nowrap;
   overflow: visible !important;
 }}
@@ -242,12 +244,13 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
 .nav-shell {{
   flex: 1 1 auto;
   overflow-y: auto;
-  padding-right: 0.2rem;
+  padding-right: 0.25rem;
+  min-height: 0;
 }}
-.nav-shell::-webkit-scrollbar {{ width: 8px; }}
+.nav-shell::-webkit-scrollbar {{ width: 6px; }}
 .nav-shell::-webkit-scrollbar-thumb {{
   background: rgba(255,255,255,0.18);
-  border-radius: 8px;
+  border-radius: 6px;
 }}
 .nav-shell::-webkit-scrollbar-track {{
   background: rgba(255,255,255,0.05);
@@ -255,93 +258,113 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
 
 .nav-item {{
   position: relative;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.375rem;
 }}
 .nh-nav-card {{
-  display:flex;
-  align-items:flex-start;
-  gap: 0.85rem;
-  padding: 0.90rem 0.95rem;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1.125rem;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
   user-select: none;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }}
-/* Transparent hover ONLY for the 5 main nav buttons */
+/* Modern hover states */
 .nav-shell .nav-item:not(.sb-user-nav):hover .nh-nav-card {{
-  background: rgba(255,255,255,0.15) !important;
-  border-color: rgba(255,255,255,0.25) !important;
+  background: rgba(255,255,255,0.16) !important;
+  transform: translateX(4px);
 }}
 
-/* Smooth hover animation */
-.nav-shell .nh-nav-card {{
-  transition: background 0.18s ease, border-color 0.18s ease;
-}}
-
-/* Keep ACTIVE state solid */
+/* Active state - modern highlight */
 .nav-item.active .nh-nav-card {{
   background: rgba(185, 226, 255, 0.92) !important;
-  border-color: rgba(185, 226, 255, 0.92) !important;
+  box-shadow: 0 4px 12px rgba(185, 226, 255, 0.3);
+  transform: translateX(6px);
+}}
+
+.nav-item.active .nh-nav-card::before {{
+  content: '';
+  position: absolute;
+  left: -1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 60%;
+  background: #ffffff;
+  border-radius: 0 4px 4px 0;
 }}
 
 
-/* Keep username button original hover */
+/* User nav hover */
 .sb-user-nav:hover .nh-nav-card {{
   background: rgba(255,255,255,0.16) !important;
-  border-color: rgba(255,255,255,0.22) !important;
 }}
 .nav-item:active .nh-nav-card {{
-  transform: scale(0.99);
-}}
-.nav-item.active .nh-nav-card {{
-  background: rgba(185, 226, 255, 0.92);
-  border-color: rgba(185, 226, 255, 0.92);
+  transform: scale(0.98);
 }}
 
 .nh-ico {{
-  width: 22px;
-  height: 22px;
-  margin-top: 0.12rem;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  color: rgba(235, 248, 255, 0.98);
+  color: rgba(235, 248, 255, 0.85);
+  transition: color 0.3s ease;
+}}
+.nav-item:hover .nh-ico {{
+  color: rgba(255, 255, 255, 0.95);
 }}
 .nav-item.active .nh-ico {{
   color: rgba(11,42,87,0.95);
 }}
 .nh-nav-text {{
-  display:flex;
+  display: flex;
   flex-direction: column;
-  gap: 0.18rem;
+  gap: 0.125rem;
 }}
 .nh-nav-title {{
-  font-weight: 850;
-  font-size: 1.02rem;
-  color: rgba(255,255,255,0.98);
-  line-height: 1.1;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.95);
+  line-height: 1.2;
+  transition: color 0.3s ease;
 }}
 .nh-nav-sub {{
-  font-weight: 520;
-  font-size: 0.86rem;
-  color: rgba(255,255,255,0.76);
-  line-height: 1.15;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.2;
+  transition: color 0.3s ease;
 }}
-.nav-item.active .nh-nav-title {{ color: #0B2A57; }}
-.nav-item.active .nh-nav-sub {{ color: rgba(11,42,87,0.75); }}
+.nav-item:hover .nh-nav-title {{
+  color: rgba(255,255,255,0.98);
+}}
+.nav-item:hover .nh-nav-sub {{
+  color: rgba(255,255,255,0.85);
+}}
+.nav-item.active .nh-nav-title {{
+  color: #0B2A57;
+  font-weight: 700;
+}}
+.nav-item.active .nh-nav-sub {{
+  color: rgba(11,42,87,0.75);
+}}
 
-/* user */
+/* User section */
 .sb-user {{
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
   border-top: 1px solid rgba(255,255,255,0.14);
+  flex-shrink: 0;
 }}
 .sb-user-row {{
-  color:#fff;
-  font-weight: 800;
-  display:flex;
-  align-items:center;
-  gap:0.5rem;
+  color: #ffffff;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }}
 
 /* ALL SIDEBAR NAV OVERLAY BUTTONS */
@@ -372,11 +395,12 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
   gap: 0.50rem !important;
 }}
 
-/* Sidebar profile/user nav item separator */
+/* User navigation */
 .sb-user-nav {{
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
   border-top: 1px solid rgba(255,255,255,0.14);
+  flex-shrink: 0;
 }}
 
 /* Profile toggle chevron */
@@ -384,29 +408,55 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
   width: 16px;
   height: 16px;
   margin-left: auto;
-  opacity: 0.65;
+  color: rgba(255,255,255,0.7);
   flex-shrink: 0;
-  transition: transform 0.2s ease;
+  transition: all 0.3s ease;
 }}
 .nh-chevron.open {{
   transform: rotate(180deg);
+  color: rgba(255,255,255,0.9);
+}}
+.sb-user-nav:hover .nh-chevron {{
+  color: rgba(255,255,255,0.9);
 }}
 
 /* Dropdown sub-items */
 .sb-dropdown-item {{
-  margin-left: 0.6rem !important;
+  margin-left: 1rem !important;
+  margin-bottom: 0.25rem !important;
 }}
 .sb-dropdown-item .nh-nav-card {{
-  background: rgba(255,255,255,0.07) !important;
-  border-color: rgba(255,255,255,0.10) !important;
+  background: rgba(255,255,255,0.08) !important;
+  padding: 0.625rem 0.875rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
 }}
 .sb-dropdown-item:hover .nh-nav-card {{
-  background: rgba(255,255,255,0.13) !important;
-  border-color: rgba(255,255,255,0.20) !important;
+  background: rgba(255,255,255,0.14) !important;
+  transform: translateX(2px);
 }}
-/* Logout item accent */
+.sb-dropdown-item .nh-nav-title {{
+  font-size: 0.825rem;
+  color: rgba(255,255,255,0.85);
+}}
+.sb-dropdown-item:hover .nh-nav-title {{
+  color: rgba(255,255,255,0.95);
+}}
+/* Logout item styling */
 .sb-logout-item .nh-nav-card {{
-  border-color: rgba(255,100,100,0.18) !important;
+  border-left: 3px solid rgba(239, 68, 68, 0.8);
+}}
+.sb-logout-item:hover .nh-nav-card {{
+  background: rgba(239, 68, 68, 0.15) !important;
+}}
+.sb-logout-item .nh-ico {{
+  color: rgba(255, 160, 160, 0.9);
+}}
+.sb-logout-item .nh-nav-title {{
+  color: rgba(255, 160, 160, 0.9);
+}}
+.sb-logout-item:hover .nh-nav-title {{
+  color: rgba(255, 180, 180, 0.95);
 }}
 .sb-logout-item .nh-nav-title {{
   color: rgba(255,160,160,0.95) !important;
