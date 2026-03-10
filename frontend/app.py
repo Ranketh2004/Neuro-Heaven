@@ -8,7 +8,7 @@ import extra_streamlit_components as stx
 from utils.google_oauth import GoogleOAuth
 from utils.api_client import post, get
 
-from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page
+from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page, profile
 
 
 LOGO_PATH = Path("assets/logo.png")
@@ -153,7 +153,7 @@ if token:
     ls_set("nh_token", token)
     ls_set("nh_user", json.dumps(user or {}))
 
-PROTECTED_PAGES = {"eeg", "soz", "mri", "asm"}
+PROTECTED_PAGES = {"eeg", "soz", "mri", "asm", "profile"}
 if (not token) and (current_page in PROTECTED_PAGES):
     st.session_state["pending_page"] = current_page
     auth_page.open("signin")
@@ -269,9 +269,28 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
   user-select: none;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }}
-.nav-item:hover .nh-nav-card {{
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.22);
+/* Transparent hover ONLY for the 5 main nav buttons */
+.nav-shell .nav-item:not(.sb-user-nav):hover .nh-nav-card {{
+  background: rgba(255,255,255,0.15) !important;
+  border-color: rgba(255,255,255,0.25) !important;
+}}
+
+/* Smooth hover animation */
+.nav-shell .nh-nav-card {{
+  transition: background 0.18s ease, border-color 0.18s ease;
+}}
+
+/* Keep ACTIVE state solid */
+.nav-item.active .nh-nav-card {{
+  background: rgba(185, 226, 255, 0.92) !important;
+  border-color: rgba(185, 226, 255, 0.92) !important;
+}}
+
+
+/* Keep username button original hover */
+.sb-user-nav:hover .nh-nav-card {{
+  background: rgba(255,255,255,0.16) !important;
+  border-color: rgba(255,255,255,0.22) !important;
 }}
 .nav-item:active .nh-nav-card {{
   transform: scale(0.99);
@@ -325,15 +344,16 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
   gap:0.5rem;
 }}
 
-/* Hide ALL nav buttons in sidebar - make them overlay the cards */
-section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) {{
+/* ALL SIDEBAR NAV OVERLAY BUTTONS */
+section[data-testid="stSidebar"] [data-testid="stButton"] {{
   position: relative !important;
   margin-top: -60px !important;
   margin-bottom: -10px !important;
   height: 55px !important;
   z-index: 100 !important;
+  pointer-events: none !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) button {{
+section[data-testid="stSidebar"] [data-testid="stButton"] button {{
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -341,6 +361,7 @@ section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) but
   height: 55px !important;
   min-height: 0 !important;
   padding: 0 !important;
+  pointer-events: auto !important;
 }}
 
 /* Reduce Streamlit element gaps in sidebar */
@@ -351,63 +372,51 @@ section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
   gap: 0.50rem !important;
 }}
 
-/* Logout button - last button in sidebar */
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type {{
-  margin-top: -60px !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button {{
-  width: 100% !important;
-  height: 65px !important;
-  border-radius: 14px !important;
-  padding: 0.85rem 0.95rem 0.85rem 0.001rem !important;
-  font-weight: 900 !important;
-  color: #fff !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  text-align: left !important;
-  justify-content: flex-start !important;
-  gap: 0.5rem !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button::before {{
-  content: "" !important;
-  display: inline-block !important;
-  width: 18px !important;
-  height: 18px !important;
-  background-size: contain !important;
-  background-repeat: no-repeat !important;
-  flex-shrink: 0 !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button:hover {{
-  background: rgba(255,255,255,0.16) !important;
-}}
-.sb-user {{ 
-    margin-bottom: 4rem !important; 
-}}
-.logout-wrap {{ 
-    margin-top: 0 !important; 
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}}
-section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button{{
-  width: 100% !important;
-  height: 34px !important;   /* reduced */
-  border-radius: 10px !important;
-  font-weight: 800 !important;
-  color: #fff !important;
-  background: rgba(255,255,255,0.12) !important;
-  border: 1px solid rgba(255,255,255,0.18) !important;
-  box-shadow: none !important;
-  text-align: left !important;
-  justify-content: flex-start !important;
-  padding: 0.2rem 0.2rem !important;  /* reduced */
-  font-size: 0.85rem !important;
+/* Sidebar profile/user nav item separator */
+.sb-user-nav {{
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(255,255,255,0.14);
 }}
 
-section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button:hover{{
-  background: transparent !important;
-  border-color: transparent !important;
-  transform: none !important;
+/* Profile toggle chevron */
+.nh-chevron {{
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  opacity: 0.65;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}}
+.nh-chevron.open {{
+  transform: rotate(180deg);
+}}
+
+/* Dropdown sub-items */
+.sb-dropdown-item {{
+  margin-left: 0.6rem !important;
+}}
+.sb-dropdown-item .nh-nav-card {{
+  background: rgba(255,255,255,0.07) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+}}
+.sb-dropdown-item:hover .nh-nav-card {{
+  background: rgba(255,255,255,0.13) !important;
+  border-color: rgba(255,255,255,0.20) !important;
+}}
+/* Logout item accent */
+.sb-logout-item .nh-nav-card {{
+  border-color: rgba(255,100,100,0.18) !important;
+}}
+.sb-logout-item .nh-nav-title {{
+  color: rgba(255,160,160,0.95) !important;
+}}
+.sb-logout-item .nh-ico {{
+  color: rgba(255,160,160,0.90) !important;
+}}
+.sb-logout-item:hover .nh-nav-card {{
+  background: rgba(255,100,100,0.12) !important;
+  border-color: rgba(255,100,100,0.30) !important;
 }}
 
 /* HERO --------------------------------------------------------- */
@@ -715,17 +724,70 @@ if token:
 
             st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
+        is_open = st.session_state.get("sb_profile_open", False)
+        chevron_class = "open" if is_open else ""
+        active_profile = "active" if current_page == "profile" and not is_open else ""
         st.markdown(
-            f'<div class="sb-user"><div class="sb-user-row">👤 <span>{user_name}</span></div></div>',
+            f'''<div class="nav-item sb-user-nav {active_profile}">
+<div class="nh-nav-card">
+  <svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div class="nh-nav-text">
+    <div class="nh-nav-title">{user_name}</div>
+    <div class="nh-nav-sub">Account</div>
+  </div>
+  <svg class="nh-chevron {chevron_class}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</div>''',
             unsafe_allow_html=True,
         )
-
-        st.markdown('<div class="logout-wrap">', unsafe_allow_html=True)
-        if st.button("Log out", key="logout_btn", use_container_width=False):
-            do_logout()
+        if st.button(" ", key="nav_profile_toggle", use_container_width=True):
+            st.session_state["sb_profile_open"] = not is_open
+            st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+
+        if is_open:
+            active_pf = "active" if current_page == "profile" else ""
+            st.markdown(
+                f'''<div class="nav-item sb-dropdown-item {active_pf}">
+<div class="nh-nav-card">
+  <svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div class="nh-nav-text">
+    <div class="nh-nav-title">View Profile</div>
+  </div>
+</div>''',
+                unsafe_allow_html=True,
+            )
+            if st.button(" ", key="nav_profile_goto", use_container_width=True):
+                st.session_state["sb_profile_open"] = False
+                go_to("profile")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            st.markdown(
+                '''<div class="nav-item sb-dropdown-item sb-logout-item">
+<div class="nh-nav-card">
+  <svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="16,17 21,12 16,7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div class="nh-nav-text">
+    <div class="nh-nav-title">Log Out</div>
+  </div>
+</div>''',
+                unsafe_allow_html=True,
+            )
+            if st.button(" ", key="nav_logout", use_container_width=True):
+                do_logout()
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)  # close nav-shell
 
 if st.session_state.get("auth_open"):
     auth_page.render_dialog()
@@ -776,5 +838,7 @@ elif current_page == "mri":
     mri_detection.render()
 elif current_page == "asm":
     asm_response.render()
+elif current_page == "profile":
+    profile.render()
 else:
     home.render()
