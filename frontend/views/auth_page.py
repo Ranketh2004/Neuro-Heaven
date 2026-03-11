@@ -256,7 +256,7 @@ def render_dialog():
         .auth-social a:hover{ background:#f8fafc; }
 
         button[kind="secondary"]{
-            width: 36px !important;
+            width: 75px !important;
             height: 36px !important;
             border-radius: 10px !important;
             border: 1px solid rgba(226,232,240,0.95) !important;
