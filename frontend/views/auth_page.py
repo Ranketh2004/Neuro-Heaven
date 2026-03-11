@@ -15,9 +15,17 @@ def _set_page(slug: str):
     st.query_params["page"] = slug
     st.rerun()
 
+def open(mode: str = "signin"):
+    st.session_state["auth_open"] = True
+    st.session_state["auth_mode"] = mode
+
+def close():
+    st.session_state["auth_open"] = False
+
+
+# Sync auth mode with URL query (?auth=signin / signup)
 def _sync_auth_mode_from_query():
-    """Sync auth mode with URL query (?auth=signin or ?auth=signup)."""
-    auth_q = st.query_params.get("auth", None)
+    auth_q = st.query_params.get("auth")
 
     if auth_q:
         if isinstance(auth_q, list):
@@ -26,13 +34,9 @@ def _sync_auth_mode_from_query():
         if auth_q in ["signin", "signup"]:
             if st.session_state.get("auth_mode") != auth_q:
                 st.session_state["auth_mode"] = auth_q
+            if not st.session_state.get("auth_open"):
+                st.session_state["auth_open"] = True
 
-def open(mode: str = "signin"):
-    st.session_state["auth_open"] = True
-    st.session_state["auth_mode"] = mode
-
-def close():
-    st.session_state["auth_open"] = False
 
 def _persist_auth_to_cookies(remember: bool):
     """
@@ -61,6 +65,9 @@ def _persist_auth_to_cookies(remember: bool):
 
 @st.dialog(" ", width="small")
 def render_dialog():
+    # Sync auth mode from URL (?auth=signin / signup)
+    _sync_auth_mode_from_query()
+
     # Handle Google OAuth callback
     # _handle_google_callback()
     
@@ -272,30 +279,11 @@ def render_dialog():
             background:#f8fafc !important;
             color:#64748b !important;
         }
-
-        /* Auth switch buttons (Sign up / Sign in) */
-        div[data-testid="stButton"] button[key="switch_to_signup"],
-        div[data-testid="stButton"] button[key="switch_to_signin"]{
-            width: 120px !important;
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            background: transparent !important;
-            color: #0284c7 !important;
-            font-weight: 700 !important;
-        }
-
-        div[data-testid="stButton"] button[key="switch_to_signup"]:hover,
-        div[data-testid="stButton"] button[key="switch_to_signin"]:hover{
-            background: transparent !important;
-            text-decoration: underline !important;
-}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    _sync_auth_mode_from_query()
     mode = st.session_state.get("auth_mode", "signin")
 
     spacer, btn_col = st.columns([0.92, 0.08])
@@ -314,11 +302,6 @@ def render_dialog():
         c1, c2 = st.columns([1, 1])
         with c1:
             remember = st.checkbox("Remember me", value=False, key="li_remember")
-        with c2:
-            st.markdown(
-                '<div class="auth-row-right"><a href="#" style="outline:none;" onclick="return false;">Forgot password?</a></div>',
-                unsafe_allow_html=True
-            )
 
         ok = st.button("Sign In", type="primary", use_container_width=True)
 
@@ -359,12 +342,12 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
+        page = st.query_params.get("page", ["home"])
+        page = page[0] if isinstance(page, list) else page
+        signup_href = f'?page={page}&auth=signup'
         st.markdown(
-            "<div style='text-align:center;margin-top:8px;'>"
-            "Don't have an account? "
-            "<a href='?auth=signup' target='_self' style='color:#0284c7;text-decoration:underline;font-weight:600;'>Sign up</a>"
-            "</div>",
-            unsafe_allow_html=True
+            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Don't have an account? <a href=\"{signup_href}\" target=\"_self\" onclick=\"window.location.href='{signup_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign up</a></div>",
+            unsafe_allow_html=True,
         )
 
     else:
@@ -410,12 +393,12 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
+        page = st.query_params.get("page", ["home"])
+        page = page[0] if isinstance(page, list) else page
+        signin_href = f'?page={page}&auth=signin'
         st.markdown(
-            "<div style='text-align:center;margin-top:8px;'>"
-            "Already have an account? "
-            "<a href='?auth=signin' target='_self' style='color:#0284c7;text-decoration:underline;font-weight:600;'>Sign in</a>"
-            "</div>",
-            unsafe_allow_html=True
+            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Already have an account? <a href=\"{signin_href}\" target=\"_self\" onclick=\"window.location.href='{signin_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign in</a></div>",
+            unsafe_allow_html=True,
         )
 
     st.markdown("</div></div>", unsafe_allow_html=True)
