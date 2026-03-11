@@ -8,7 +8,7 @@ import extra_streamlit_components as stx
 from utils.google_oauth import GoogleOAuth
 from utils.api_client import post, get
 
-from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page
+from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page, profile
 
 
 LOGO_PATH = Path("assets/logo.png")
@@ -153,7 +153,7 @@ if token:
     ls_set("nh_token", token)
     ls_set("nh_user", json.dumps(user or {}))
 
-PROTECTED_PAGES = {"eeg", "soz", "mri", "asm"}
+PROTECTED_PAGES = {"eeg", "soz", "mri", "asm", "profile"}
 if (not token) and (current_page in PROTECTED_PAGES):
     st.session_state["pending_page"] = current_page
     auth_page.open("signin")
@@ -181,6 +181,9 @@ CSS = f"""
 MainMenu {{visibility: hidden;}}
 footer {{visibility: hidden;}}
 header[data-testid="stHeader"] {{ display: none !important; }}
+.block-container {{
+    padding-top: 0rem !important;
+}}
 
 section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !important; }}
 {"" if token else "section[data-testid='stSidebar']{display:none !important;} [data-testid='collapsedControl']{display:none !important;}"}
@@ -193,7 +196,8 @@ section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {{ display:none !i
 
 section[data-testid="stSidebar"] {{
   background: linear-gradient(180deg, #20A0D8 0%, #0E5C7A 100%) !important;
-  border-right: 1px solid rgba(255,255,255,0.08);
+  border-right: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: 4px 0 12px rgba(0,0,0,0.1) !important;
 }}
 section[data-testid="stSidebar"] > div {{
   padding-top: 0 !important;
@@ -203,35 +207,36 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
   height: 100vh !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: visible !important;
-  padding: 1.2rem 0.95rem 0.95rem 0.95rem !important;
+  overflow: hidden !important;
+  padding: 1rem 1.25rem !important;
   box-sizing: border-box !important;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }}
 
 .sb-brand {{
-  display:flex;
-  align-items:center;
-  justify-content:flex-start;
-  gap: 0.85rem;
-  padding: 0 0 0.7rem 0;
-  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0 0 1rem 0;
+  margin-bottom: 1.25rem;
   border-bottom: 1px solid rgba(255,255,255,0.14);
   overflow: visible !important;
-}}
-.sb-logo {{
-  width: 60px;
-  height: 60px;
-  border-radius: 14px;
-  object-fit: cover;
   flex-shrink: 0;
 }}
+.sb-logo {{
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}}
 .sb-brand-name {{
-  color:#fff;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  font-size: 1.25rem;
-  text-transform: uppercase;
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 1.2rem;
   white-space: nowrap;
   overflow: visible !important;
 }}
@@ -239,12 +244,13 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
 .nav-shell {{
   flex: 1 1 auto;
   overflow-y: auto;
-  padding-right: 0.2rem;
+  padding-right: 0.25rem;
+  min-height: 0;
 }}
-.nav-shell::-webkit-scrollbar {{ width: 8px; }}
+.nav-shell::-webkit-scrollbar {{ width: 6px; }}
 .nav-shell::-webkit-scrollbar-thumb {{
   background: rgba(255,255,255,0.18);
-  border-radius: 8px;
+  border-radius: 6px;
 }}
 .nav-shell::-webkit-scrollbar-track {{
   background: rgba(255,255,255,0.05);
@@ -252,85 +258,120 @@ section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {{
 
 .nav-item {{
   position: relative;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.375rem;
 }}
 .nh-nav-card {{
-  display:flex;
-  align-items:flex-start;
-  gap: 0.85rem;
-  padding: 0.90rem 0.95rem;
-  border-radius: 16px;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.12);
-  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1.125rem;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
   user-select: none;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }}
-.nav-item:hover .nh-nav-card {{
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.22);
+/* Hover: each nav item is in its own st.container() → stVerticalBlock.
+   :has(> stButton:hover) fires when the transparent overlay button is hovered. */
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .nh-nav-card {{
+  background: rgba(255,255,255,0.16) !important;
 }}
-.nav-item:active .nh-nav-card {{
-  transform: scale(0.99);
+
+/* Active state */
+.nh-nav-card.active {{
+  background: rgba(185, 226, 255, 0.92) !important;
+  box-shadow: 0 4px 12px rgba(185, 226, 255, 0.3);
 }}
-.nav-item.active .nh-nav-card {{
-  background: rgba(185, 226, 255, 0.92);
-  border-color: rgba(185, 226, 255, 0.92);
+
+.nh-nav-card.active::before {{
+  content: '';
+  position: absolute;
+  left: -1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 60%;
+  background: #ffffff;
+  border-radius: 0 4px 4px 0;
+}}
+
+/* Press/click state */
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:active) .nh-nav-card {{
+  transform: scale(0.98);
 }}
 
 .nh-ico {{
-  width: 22px;
-  height: 22px;
-  margin-top: 0.12rem;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
-  color: rgba(235, 248, 255, 0.98);
+  color: rgba(235, 248, 255, 0.85);
+  transition: color 0.3s ease;
 }}
-.nav-item.active .nh-ico {{
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .nh-ico {{
+  color: rgba(255, 255, 255, 0.95);
+}}
+.nh-nav-card.active .nh-ico {{
   color: rgba(11,42,87,0.95);
 }}
 .nh-nav-text {{
-  display:flex;
+  display: flex;
   flex-direction: column;
-  gap: 0.18rem;
+  gap: 0.125rem;
 }}
 .nh-nav-title {{
-  font-weight: 850;
-  font-size: 1.02rem;
-  color: rgba(255,255,255,0.98);
-  line-height: 1.1;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.95);
+  line-height: 1.2;
+  transition: color 0.3s ease;
 }}
 .nh-nav-sub {{
-  font-weight: 520;
-  font-size: 0.86rem;
-  color: rgba(255,255,255,0.76);
-  line-height: 1.15;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.7);
+  line-height: 1.2;
+  transition: color 0.3s ease;
 }}
-.nav-item.active .nh-nav-title {{ color: #0B2A57; }}
-.nav-item.active .nh-nav-sub {{ color: rgba(11,42,87,0.75); }}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .nh-nav-title {{
+  color: rgba(255,255,255,0.98);
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .nh-nav-sub {{
+  color: rgba(255,255,255,0.85);
+}}
+.nh-nav-card.active .nh-nav-title {{
+  color: #0B2A57;
+  font-weight: 700;
+}}
+.nh-nav-card.active .nh-nav-sub {{
+  color: rgba(11,42,87,0.75);
+}}
 
-/* user */
+/* User section */
 .sb-user {{
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
   border-top: 1px solid rgba(255,255,255,0.14);
+  flex-shrink: 0;
 }}
 .sb-user-row {{
-  color:#fff;
-  font-weight: 800;
-  display:flex;
-  align-items:center;
-  gap:0.5rem;
+  color: #ffffff;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }}
 
-/* Hide ALL nav buttons in sidebar - make them overlay the cards */
-section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) {{
+/* ALL SIDEBAR NAV OVERLAY BUTTONS */
+section[data-testid="stSidebar"] [data-testid="stButton"] {{
   position: relative !important;
   margin-top: -60px !important;
   margin-bottom: -10px !important;
   height: 55px !important;
   z-index: 100 !important;
+  pointer-events: none !important;
 }}
-section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) button {{
+section[data-testid="stSidebar"] [data-testid="stButton"] button {{
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -338,6 +379,7 @@ section[data-testid="stSidebar"] [data-testid="stButton"]:not(:last-of-type) but
   height: 55px !important;
   min-height: 0 !important;
   padding: 0 !important;
+  pointer-events: auto !important;
 }}
 
 /* Reduce Streamlit element gaps in sidebar */
@@ -345,66 +387,71 @@ section[data-testid="stSidebar"] [data-testid="stMarkdown"] {{
   margin-bottom: 0 !important;
 }}
 section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {{
-  gap: 0.50rem !important;
+  gap: 0.65rem !important;
 }}
 
-/* Logout button - last button in sidebar */
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type {{
-  margin-top: -60px !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button {{
-  width: 100% !important;
-  height: 65px !important;
-  border-radius: 14px !important;
-  padding: 0.85rem 0.95rem 0.85rem 0.001rem !important;
-  font-weight: 900 !important;
-  color: #fff !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  text-align: left !important;
-  justify-content: flex-start !important;
-  gap: 0.5rem !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button::before {{
-  content: "" !important;
-  display: inline-block !important;
-  width: 18px !important;
-  height: 18px !important;
-  background-size: contain !important;
-  background-repeat: no-repeat !important;
-  flex-shrink: 0 !important;
-}}
-section[data-testid="stSidebar"] [data-testid="stButton"]:last-of-type button:hover {{
-  background: rgba(255,255,255,0.16) !important;
-}}
-.sb-user {{ 
-    margin-bottom: 4rem !important; 
-}}
-.logout-wrap {{ 
-    margin-top: 0 !important; 
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-}}
-section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button{{
-  width: 100% !important;
-  height: 34px !important;   /* reduced */
-  border-radius: 10px !important;
-  font-weight: 800 !important;
-  color: #fff !important;
-  background: rgba(255,255,255,0.12) !important;
-  border: 1px solid rgba(255,255,255,0.18) !important;
-  box-shadow: none !important;
-  text-align: left !important;
-  justify-content: flex-start !important;
-  padding: 0.2rem 0.2rem !important;  /* reduced */
-  font-size: 0.85rem !important;
+/* User navigation separator */
+.sb-user-nav {{
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.14);
+  flex-shrink: 0;
 }}
 
-section[data-testid="stSidebar"] .logout-wrap [data-testid="stButton"] button:hover{{
-  background: transparent !important;
-  border-color: transparent !important;
-  transform: none !important;
+/* Profile toggle chevron */
+.nh-chevron {{
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: rgba(255,255,255,0.7);
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}}
+.nh-chevron.open {{
+  transform: rotate(180deg);
+  color: rgba(255,255,255,0.9);
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .nh-chevron {{
+  color: rgba(255,255,255,0.9);
+}}
+
+/* Dropdown sub-items */
+.sb-dropdown-item {{
+  margin-left: 1rem !important;
+  margin-bottom: 0.30rem !important;
+}}
+.sb-dropdown-item .nh-nav-card {{
+  background: rgba(255,255,255,0.08) !important;
+  padding: 0.625rem 0.875rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .sb-dropdown-item .nh-nav-card {{
+  background: rgba(255,255,255,0.14) !important;
+}}
+.sb-dropdown-item .nh-nav-title {{
+  font-size: 0.825rem;
+  color: rgba(255,255,255,0.85);
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .sb-dropdown-item .nh-nav-title {{
+  color: rgba(255,255,255,0.95);
+}}
+/* Logout item styling */
+.sb-logout-item .nh-nav-card {{
+  border-left: 3px solid rgba(239, 68, 68, 0.8);
+}}
+.sb-logout-item .nh-nav-title {{
+  color: rgba(255,160,160,0.95) !important;
+}}
+.sb-logout-item .nh-ico {{
+  color: rgba(255,160,160,0.90) !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .sb-logout-item .nh-nav-card {{
+  background: rgba(255,100,100,0.12) !important;
+  border-color: rgba(255,100,100,0.30) !important;
+}}
+section[data-testid="stSidebar"] [data-testid="stVerticalBlock"]:has(> [data-testid="stButton"]:hover) .sb-logout-item .nh-nav-title {{
+  color: rgba(255, 180, 180, 0.95);
 }}
 
 /* HERO --------------------------------------------------------- */
@@ -692,37 +739,83 @@ if token:
 
         for key, ico, title, subtitle in nav_items:
             active = "active" if current_page == key else ""
-            st.markdown(f'<div class="nav-item {active}">', unsafe_allow_html=True)
-
-            st.markdown(
-                f"""
-                <div class="nh-nav-card">
-                    {_svg(ico)}
-                    <div class="nh-nav-text">
-                        <div class="nh-nav-title">{title}</div>
-                        <div class="nh-nav-sub">{subtitle}</div>
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div class="nh-nav-card {active}">
+                        {_svg(ico)}
+                        <div class="nh-nav-text">
+                            <div class="nh-nav-title">{title}</div>
+                            <div class="nh-nav-sub">{subtitle}</div>
+                        </div>
                     </div>
-                </div>
-                """,
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button(" ", key=f"nav_{key}", use_container_width=True):
+                    go_to(key)
+
+        is_open = st.session_state.get("sb_profile_open", False)
+        chevron_class = "open" if is_open else ""
+        active_profile = "active" if current_page == "profile" and not is_open else ""
+        with st.container():
+            st.markdown(
+                f'''<div class="sb-user-nav"><div class="nh-nav-card {active_profile}">
+  <svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div class="nh-nav-text">
+    <div class="nh-nav-title">{user_name}</div>
+    <div class="nh-nav-sub">Account</div>
+  </div>
+  <svg class="nh-chevron {chevron_class}" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</div></div>''',
                 unsafe_allow_html=True,
             )
+            if st.button(" ", key="nav_profile_toggle", use_container_width=True):
+                st.session_state["sb_profile_open"] = not is_open
+                st.rerun()
 
-            if st.button(" ", key=f"nav_{key}", use_container_width=True):
-                go_to(key)
+        if is_open:
+            active_pf = "active" if current_page == "profile" else ""
+            with st.container():
+                st.markdown(
+                    f'''<div class="sb-dropdown-item"><div class="nh-nav-card {active_pf}">
+  <svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+    <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div class="nh-nav-text">
+    <div class="nh-nav-title">View Profile</div>
+  </div>
+</div></div>''',
+                    unsafe_allow_html=True,
+                )
+                if st.button(" ", key="nav_profile_goto", use_container_width=True):
+                    st.session_state["sb_profile_open"] = False
+                    go_to("profile")
 
-            st.markdown("</div>", unsafe_allow_html=True)
+            with st.container():
+                st.markdown(
+                    '''<div class="sb-dropdown-item sb-logout-item"><div class="nh-nav-card">
+  <svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="16,17 21,12 16,7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <div class="nh-nav-text">
+    <div class="nh-nav-title">Log Out</div>
+  </div>
+</div></div>''',
+                    unsafe_allow_html=True,
+                )
+                if st.button(" ", key="nav_logout", use_container_width=True):
+                    do_logout()
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown(
-            f'<div class="sb-user"><div class="sb-user-row">👤 <span>{user_name}</span></div></div>',
-            unsafe_allow_html=True,
-        )
-
-        st.markdown('<div class="logout-wrap">', unsafe_allow_html=True)
-        if st.button("Log out", key="logout_btn", use_container_width=False):
-            do_logout()
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)  # close nav-shell
 
 if st.session_state.get("auth_open"):
     auth_page.render_dialog()
@@ -773,5 +866,7 @@ elif current_page == "mri":
     mri_detection.render()
 elif current_page == "asm":
     asm_response.render()
+elif current_page == "profile":
+    profile.render()
 else:
     home.render()
