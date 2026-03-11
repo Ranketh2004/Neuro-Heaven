@@ -108,16 +108,16 @@ class EpilepsyPipeline:
     def final_prediction(self, features_df, file_name=None):
         self.load_config(file_name)
         final_model = joblib.load(CLASSIFIER_MODEL_PATH)
-        prediction = []
+        predictons = []
         feature_columns = [col for col in features_df.columns if col.startswith("f")]
         X = features_df[feature_columns].values
         predictions = list(self.predictions)
         for i, row in enumerate(X):
             pred = final_model.predict(row.reshape(1, -1))
-            prediction.append(pred[0])
+            predictons.append(pred[0])
         predictions = np.array(predictions)
-        print(f"Predictions: {predictions}")
-        return predictions
+        #print(f"Predictions: {predictions}")
+        return predictions if len(predictions) > 0 else np.array(predictons)
 
     def diagnose(self, raw_obj, layer_name, file_name=None):
         """
@@ -155,7 +155,4 @@ class EpilepsyPipeline:
         finally:
             if spec_dir:
                 self.cleanup(spec_dir)
-
-
-
 

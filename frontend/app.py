@@ -735,7 +735,7 @@ if token:
 
         nav_items = [
             ("dashboard", "dashboard", "Neuro Hub", "Module Overview"),
-            ("eeg", "brain", "EEG Diagnosis", "Case-Based Reasoning"),
+            ("eeg", "brain", "EEG Diagnosis", "Epilepsy Diagnosis"),
             ("soz", "pulse", "SOZ Localization", "EEG Graph Analysis"),
             ("mri", "scan", "MRI Detection", "Lesion Analysis"),
             ("asm", "pill", "ASM Predictor", "Treatment Response"),
