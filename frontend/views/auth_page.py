@@ -256,7 +256,7 @@ def render_dialog():
         .auth-social a:hover{ background:#f8fafc; }
 
         button[kind="secondary"]{
-            width: 75px !important;
+            width: 36px !important;
             height: 36px !important;
             border-radius: 10px !important;
             border: 1px solid rgba(226,232,240,0.95) !important;
@@ -359,18 +359,13 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
-        col1, col2 = st.columns([3,1])
-
-        with col1:
-            st.markdown(
-                "<div style='text-align:right;margin-top:8px;'>Don't have an account?</div>",
-                unsafe_allow_html=True
-            )
-
-        with col2:
-            if st.button("Sign up", key="switch_to_signup"):
-                st.session_state["auth_mode"] = "signup"
-                st.rerun()
+        st.markdown(
+            "<div style='text-align:center;margin-top:8px;'>"
+            "Don't have an account? "
+            "<a href='?auth=signup' target='_self' style='color:#0284c7;text-decoration:underline;font-weight:600;'>Sign up</a>"
+            "</div>",
+            unsafe_allow_html=True
+        )
 
     else:
         st.markdown('<div class="auth-title">Create an account</div>', unsafe_allow_html=True)
@@ -415,17 +410,12 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
-        col1, col2 = st.columns([3,1])
-
-        with col1:
-            st.markdown(
-                "<div style='text-align:right;margin-top:8px;'>Already have an account?</div>",
-                unsafe_allow_html=True
-            )
-
-        with col2:
-            if st.button("Sign in", key="switch_to_signin"):
-                st.session_state["auth_mode"] = "signin"
-                st.rerun()
+        st.markdown(
+            "<div style='text-align:center;margin-top:8px;'>"
+            "Already have an account? "
+            "<a href='?auth=signin' target='_self' style='color:#0284c7;text-decoration:underline;font-weight:600;'>Sign in</a>"
+            "</div>",
+            unsafe_allow_html=True
+        )
 
     st.markdown("</div></div>", unsafe_allow_html=True)
