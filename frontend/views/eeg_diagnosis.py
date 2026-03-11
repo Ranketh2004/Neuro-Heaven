@@ -248,7 +248,7 @@ def render():
                 unsafe_allow_html=True
             )
             st.markdown(
-                f'<div class="upload-meta"><span class="chip">Accepted: EDF only</span><span class="chip">Max {MAX_MB} MB</span><span class="chip">HIPAA-like demo</span></div>',
+                f'<div class="upload-meta"><span class="chip">Accepted: EDF only</span><span class="chip">Max {MAX_MB} MB</span></div>',
                 unsafe_allow_html=True
             )
             st.markdown(
@@ -332,7 +332,7 @@ def render():
             """,
             unsafe_allow_html=True
         )
-        analyze_button = st.button("Analyze EEG", type="primary", use_container_width=True)
+        analyze_button = st.button("Analyze EEG", type="primary")
 
         # Analyze path: call backend, store + route to results
         if analyze_button:
