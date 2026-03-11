@@ -350,17 +350,23 @@ def render():
                         )
 
                         mri_b64 = data.get("mri_b64")
+                        fcd_b64 = data.get("fcd_b64")
 
-                        if img_b64 or mri_b64:
+                        if img_b64 or mri_b64 or fcd_b64:
                             # Header for imaging results
                             st.markdown("### Imaging Analysis")
                             
-                            col_original, col_overlay = st.columns(2)
+                            col_original, col_fcd, col_overlay = st.columns(3)
                             
                             if mri_b64:
                                 with col_original:
                                     mri_bytes = base64.b64decode(mri_b64)
                                     st.image(mri_bytes, caption="MRI slice analyzed by the model", use_container_width=True)
+                            
+                            if fcd_b64:
+                                with col_fcd:
+                                    fcd_bytes = base64.b64decode(fcd_b64)
+                                    st.image(fcd_bytes, caption="FCD detection (purple = detected region)", use_container_width=True)
                             
                             if img_b64:
                                 with col_overlay:
