@@ -241,47 +241,187 @@ def render():
 
                         prediction = stats.get("prediction", "N/A")
                         probability = stats.get("fcd_probability", 0.0)
+                        best_slice_info = stats.get("best_slice_info", {})
+                        num_patches = stats.get("num_patches", 0)
                         
                         # Define threshold for FCD detection
                         threshold = 0.5
                         fcd_detected = probability >= threshold
 
-                        # Prediction result banner
+                        # Clinical Disclaimer Banner
+                        st.markdown(
+                            '<div style="background: #FFF3CD; border: 1px solid #FFEAA7; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">'
+                            '<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">'
+                            '<span style="color: #856404; font-size: 1.1rem;">⚠️</span>'
+                            '<strong style="color: #856404;">Clinical Notice</strong>'
+                            '</div>'
+                            '<p style="margin: 0; color: #856404; font-size: 0.9rem;">'
+                            'This tool is designed for decision support and research use. It does not replace expert radiological or neurological assessment.'
+                            '</p>'
+                            '</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        # Clinical Summary Card
+                        result_color = "#dc3545" if fcd_detected else "#28a745"
+                        result_bg = "#f8d7da" if fcd_detected else "#d4edda"
+                        result_border = "#dc3545" if fcd_detected else "#28a745"
+                        
+                        result_text = "FCD pattern detected by the model" if fcd_detected else "No FCD pattern detected by the model"
+                        
+                        st.markdown(
+                            f'<div style="background: {result_bg}; border: 2px solid {result_border}; border-radius: 12px; padding: 1.2rem; margin-bottom: 1.5rem;">'
+                            f'<div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">'
+                            f'<div style="background: {result_color}; color: white; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: bold;">'
+                            f'{"!" if fcd_detected else "✓"}'
+                            f'</div>'
+                            f'<h3 style="margin: 0; color: {result_color}; font-size: 1.3rem;">{result_text}</h3>'
+                            f'</div>'
+                            
+                            # Probability Bar
+                            f'<div style="margin-bottom: 1rem;">'
+                            f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">'
+                            f'<span style="color: #495057; font-weight: 600;">FCD Probability</span>'
+                            f'<span style="color: #495057; font-weight: 700; font-size: 1.1rem;">{probability:.2%}</span>'
+                            f'</div>'
+                            # Probability bar
+                            f'<div style="background: #e9ecef; height: 12px; border-radius: 6px; overflow: hidden; position: relative;">'
+                            f'<div style="background: linear-gradient(to right, #28a745, #ffc107, #dc3545); height: 100%; width: {min(probability * 100, 100)}%; border-radius: 6px;"></div>'
+                            f'<div style="position: absolute; left: 50%; top: 0; width: 2px; height: 100%; background: #6c757d; transform: translateX(-50%);"></div>'
+                            f'</div>'
+                            f'<div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #6c757d; margin-top: 0.25rem;">'
+                            f'<span>Low (0%)</span>'
+                            f'<span style="font-weight: 600;">Threshold (50%)</span>'
+                            f'<span>High (100%)</span>'
+                            f'</div>'
+                            f'</div>'
+                            
+                            # Analysis Details Grid
+                            f'<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.9rem;">'
+                            f'<div><strong>Decision Threshold:</strong> 50%</div>'
+                            f'<div><strong>Patches Analyzed:</strong> {num_patches}</div>'
+                            f'<div><strong>MRI Slice Reviewed:</strong> {best_slice_info.get("slice_idx", "N/A")}</div>'
+                            f'<div><strong>Model Focus Location:</strong> ({best_slice_info.get("x", "N/A")}, {best_slice_info.get("y", "N/A")})</div>'
+                            f'</div>'
+                            
+                            f'<div style="font-size: 0.85rem; color: #6c757d; font-style: italic;">'
+                            f'Analysis Type: Patch-based CNN classification with Grad-CAM explanation'
+                            f'</div>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        # Clinical Interpretation Box
                         if fcd_detected:
-                            st.error(f"**FCD Detected** — Probability: {probability:.2%}")
+                            interpretation = (
+                                "The model identified imaging patterns associated with Focal Cortical Dysplasia in the reviewed region. "
+                                "The attention map highlights influential regions but is not an exact lesion segmentation. "
+                                "Further expert review and correlation with clinical findings is recommended."
+                            )
+                            interp_color = "#721c24"
+                            interp_bg = "#f8d7da"
                         else:
-                            st.success(f"**No FCD Detected** — Probability: {probability:.2%}")
+                            interpretation = (
+                                "The model did not identify strong imaging patterns consistent with Focal Cortical Dysplasia in the reviewed region. "
+                                "The attention map indicates which areas influenced the decision and should not be interpreted as a confirmed abnormality."
+                            )
+                            interp_color = "#155724"
+                            interp_bg = "#d4edda"
+                        
+                        st.markdown(
+                            f'<div style="background: {interp_bg}; border-left: 4px solid {interp_color}; padding: 1rem; margin-bottom: 1.5rem; border-radius: 0 8px 8px 0;">'
+                            f'<h4 style="margin: 0 0 0.5rem; color: {interp_color}; font-size: 1rem;">Clinical Interpretation</h4>'
+                            f'<p style="margin: 0; color: {interp_color}; font-size: 0.9rem; line-height: 1.5;">{interpretation}</p>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        # Model Logic Explanation
+                        st.markdown(
+                            '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">'
+                            '<h4 style="margin: 0 0 0.75rem; color: #495057; font-size: 1rem;">Analysis Method</h4>'
+                            '<p style="margin: 0; color: #6c757d; font-size: 0.9rem; line-height: 1.5;">'
+                            'The model reviews multiple patches across MRI slices and reports the slice with the strongest model response. '
+                            'The displayed slice represents the most informative reviewed region, not necessarily a confirmed lesion site. '
+                            'Grad-CAM visualization shows model attention patterns during classification.'
+                            '</p>'
+                            '</div>',
+                            unsafe_allow_html=True
+                        )
 
                         mri_b64 = data.get("mri_b64")
 
                         if img_b64 or mri_b64:
-                            col_mri, col_cam = st.columns(2)
+                            # Header for imaging results
+                            st.markdown("### Imaging Analysis")
+                            
+                            col_original, col_overlay = st.columns(2)
+                            
                             if mri_b64:
-                                with col_mri:
+                                with col_original:
                                     mri_bytes = base64.b64decode(mri_b64)
-                                    # Show appropriate caption based on detection result
-                                    if fcd_detected:
-                                        caption = "Detected lesion region"
-                                    else:
-                                        caption = "MRI Brain slice analyzed by the model"
-                                    st.image(mri_bytes, caption=caption, use_container_width=True)
+                                    st.image(mri_bytes, caption="MRI slice analyzed by the model", use_container_width=True)
                             
                             if img_b64:
-                                with col_cam:
+                                with col_overlay:
                                     img_bytes = base64.b64decode(img_b64)
-                                    st.image(img_bytes, caption="Grad-CAM attention map (regions analyzed by the model)", use_container_width=True)
+                                    st.image(img_bytes, caption="Grad-CAM attention overlay", use_container_width=True)
                                     
-                                    # Add explanation about Grad-CAM
+                                    # Helper text about the marker
                                     st.markdown(
-                                        '<p style="font-size: 0.85rem; color: #666; margin-top: 0.5rem; line-height: 1.4;">'
-                                        '<strong>Grad-CAM</strong> highlights the regions the model focused on while making the prediction. '
-                                        'It does not necessarily indicate an abnormality.'
-                                        '</p>',
+                                        '<div style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 0.6rem; margin-top: 0.5rem;">'
+                                        '<p style="margin: 0; color: #495057; font-size: 0.8rem;">'
+                                        '<strong>White cross:</strong> Model attention center at patch location ({}, {})'
+                                        '</p>'
+                                        '</div>'.format(
+                                            best_slice_info.get("cx", "N/A"),
+                                            best_slice_info.get("cy", "N/A")
+                                        ),
                                         unsafe_allow_html=True
                                     )
 
-                        if stats:
-                            st.markdown("### Prediction Details")
+                            # Enhanced explanation below both images
+                            st.markdown(
+                                '<div style="background: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 8px; padding: 1rem; margin: 1rem 0;">'
+                                '<h4 style="margin: 0 0 0.75rem; color: #004085; font-size: 1rem;">Understanding the Visualization</h4>'
+                                '<p style="margin: 0; color: #004085; font-size: 0.9rem; line-height: 1.5;">'
+                                'The heatmap highlights regions that influenced the model\'s prediction and '
+                                '<strong>does not represent an exact lesion boundary</strong>. '
+                                'The overlay shows where the model focused its attention during analysis, '
+                                'overlaid directly on the anatomical structures for spatial context. '
+                                'Clinical interpretation must consider both the probability score and '
+                                'anatomical correlation with expert radiological assessment.'
+                                '</p>'
+                                '</div>',
+                                unsafe_allow_html=True
+                            )
+
+                            # Overall interpretation for both images
+                            interpretation_style = "background: #f8f9fa; border-left: 4px solid #6c757d; padding: 1rem; margin: 1.5rem 0; border-radius: 0 8px 8px 0;"
+                            if fcd_detected:
+                                region_text = "region with highest model response"
+                                context_text = ("The model identified patterns associated with FCD in the highlighted region. "
+                                              "Clinical correlation and expert radiological review are essential for diagnosis.")
+                            else:
+                                region_text = "areas of model attention"
+                                context_text = ("The model did not identify strong FCD patterns. "
+                                              "The attention areas show which regions influenced this decision but do not indicate abnormalities.")
+                            
+                            st.markdown(
+                                f'<div style="{interpretation_style}">'
+                                f'<h4 style="margin: 0 0 0.5rem; color: #495057; font-size: 0.95rem;">Spatial Correlation</h4>'
+                                f'<p style="margin: 0; color: #6c757d; font-size: 0.9rem; line-height: 1.5;">'
+                                f'The aligned visualization shows the {region_text} in anatomical context. '
+                                f'{context_text} The white marker indicates the center of the analyzed patch '
+                                f'for spatial reference on brain hemispheres and anatomical landmarks.'
+                                f'</p>'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+
+                        # Collapsible Technical Details
+                        with st.expander("🔧 Technical Details (Advanced Users)"):
+                            st.markdown("**Raw Model Output:**")
                             st.json(stats)
 
                     except requests.exceptions.RequestException as e:
