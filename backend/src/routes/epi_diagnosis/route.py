@@ -236,6 +236,7 @@ async def predict_mri(request: Request, file: UploadFile = File(...)) -> Dict[st
         return {
             "image_b64": result["image_b64"],
             "mri_b64": result["mri_b64"],
+            "fcd_b64": result["fcd_b64"],
             "stats": {
                 "fcd_probability": result["fcd_probability"],
                 "prediction": result["prediction"],
