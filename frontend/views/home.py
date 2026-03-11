@@ -35,8 +35,7 @@ stroke-linecap="round" stroke-linejoin="round">
 <line x1="6" y1="20" x2="6" y2="14"></line>
 </svg>
 </div>
-<div class="nh-stat-value">10,000+</div>
-<div class="nh-stat-label-main">Patients Analyzed</div>
+<div class="nh-stat-label-main">High Volume of Patients Analyzed</div>
 </div>
 
 <div class="nh-stat-card">
@@ -48,8 +47,7 @@ stroke-linecap="round" stroke-linejoin="round">
 <circle cx="12" cy="12" r="1"></circle>
 </svg>
 </div>
-<div class="nh-stat-value">94%</div>
-<div class="nh-stat-label-main">Diagnostic Accuracy</div>
+<div class="nh-stat-label-main">High Diagnostic Accuracy</div>
 </div>
 
 <div class="nh-stat-card">
@@ -59,7 +57,6 @@ stroke-linecap="round" stroke-linejoin="round">
 <polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polyline>
 </svg>
 </div>
-<div class="nh-stat-value">5 min</div>
 <div class="nh-stat-label-main">Average Analysis Time</div>
 </div>
 
@@ -70,7 +67,6 @@ stroke-linecap="round" stroke-linejoin="round">
 <path d="M12 22s8-4 8-10V6l-8-4-8 4v6c0 6 8 10 8 10z"></path>
 </svg>
 </div>
-<div class="nh-stat-value">HIPAA</div>
 <div class="nh-stat-label-main">Compliant &amp; Secure</div>
 </div>
 

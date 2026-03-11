@@ -22,6 +22,22 @@ def open(mode: str = "signin"):
 def close():
     st.session_state["auth_open"] = False
 
+
+# Sync auth mode with URL query (?auth=signin / signup)
+def _sync_auth_mode_from_query():
+    auth_q = st.query_params.get("auth")
+
+    if auth_q:
+        if isinstance(auth_q, list):
+            auth_q = auth_q[0]
+
+        if auth_q in ["signin", "signup"]:
+            if st.session_state.get("auth_mode") != auth_q:
+                st.session_state["auth_mode"] = auth_q
+            if not st.session_state.get("auth_open"):
+                st.session_state["auth_open"] = True
+
+
 def _persist_auth_to_cookies(remember: bool):
     """
     Reuse CookieManager created in app.py to avoid StreamlitDuplicateElementKey.
@@ -49,6 +65,9 @@ def _persist_auth_to_cookies(remember: bool):
 
 @st.dialog(" ", width="small")
 def render_dialog():
+    # Sync auth mode from URL (?auth=signin / signup)
+    _sync_auth_mode_from_query()
+
     # Handle Google OAuth callback
     # _handle_google_callback()
     
@@ -283,11 +302,6 @@ def render_dialog():
         c1, c2 = st.columns([1, 1])
         with c1:
             remember = st.checkbox("Remember me", value=False, key="li_remember")
-        with c2:
-            st.markdown(
-                '<div class="auth-row-right"><a href="#" style="outline:none;" onclick="return false;">Forgot password?</a></div>',
-                unsafe_allow_html=True
-            )
 
         ok = st.button("Sign In", type="primary", use_container_width=True)
 

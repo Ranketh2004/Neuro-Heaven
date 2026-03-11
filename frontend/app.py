@@ -817,6 +817,9 @@ if token:
 
         st.markdown("</div>", unsafe_allow_html=True)  # close nav-shell
 
+# Allow ?auth=signin / ?auth=signup URL params to open the dialog on fresh load
+auth_page._sync_auth_mode_from_query()
+
 if st.session_state.get("auth_open"):
     auth_page.render_dialog()
     if st.session_state.get("token"):
