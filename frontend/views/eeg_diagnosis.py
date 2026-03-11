@@ -308,33 +308,31 @@ def render():
             st.markdown('</div>', unsafe_allow_html=True)  # page
             return
 
-        # Buttons (same row)
-        c1, c2 = st.columns(2)
-        with c1:
-            analyze_button = st.button("Analyze EEG", type="primary", use_container_width=True)
-        with c2:
-            test_button = st.button("Test Visualization", use_container_width=True)
-
-        # Test path: set session + route to results
-        # if test_button:
-        #     st.session_state["dx_uploaded_file_name"] = uploaded_file.name
-        #     st.session_state["dx_processing_time"] = 0.00
-        #     _dummy_preds = [0] * 200
-        #     for _idx in [15, 16, 17, 45, 60, 80, 81, 120, 135, 160, 175, 190]:
-        #         _dummy_preds[_idx] = 1
-        #     _seizure_count = sum(_dummy_preds)   # 12
-        #     _total = len(_dummy_preds)           # 200
-        #     st.session_state["dx_result"] = {
-        #         "final_diagnosis": "Seizure Detected" if _seizure_count > _total / 2 else "No Seizure Detected",
-        #         "epoch_predictions": _dummy_preds,
-        #         "seizure_epochs": _seizure_count,
-        #         "total_epochs": _total,
-        #     }
-        #     try:
-        #         st.query_params = {"page": "eeg", "eeg_mode": "results"}
-        #     except Exception:
-        #         pass
-        #     st.rerun()
+        st.markdown(
+            """
+            <style>
+                div[data-testid="stButton"] > button[kind="primary"] {
+                    background: linear-gradient(135deg, #4A7DFF 0%, #356AC3 100%);
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: 12px;
+                    padding: 0.75rem 2rem;
+                    font-size: 1.05rem;
+                    font-weight: 700;
+                    letter-spacing: 0.02em;
+                    transition: all 200ms ease;
+                    box-shadow: 0 4px 12px rgba(74, 125, 255, 0.3);
+                }
+                div[data-testid="stButton"] > button[kind="primary"]:hover {
+                    background: linear-gradient(135deg, #356AC3 0%, #2A5AB0 100%);
+                    box-shadow: 0 6px 18px rgba(53, 106, 195, 0.4);
+                    transform: translateY(-1px);
+                }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+        analyze_button = st.button("Analyze EEG", type="primary", use_container_width=True)
 
         # Analyze path: call backend, store + route to results
         if analyze_button:
