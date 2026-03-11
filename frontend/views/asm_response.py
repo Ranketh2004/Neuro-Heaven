@@ -674,10 +674,10 @@ def render():
             font-size: 1.05rem !important;
             font-weight: 700 !important;
             letter-spacing: 0.03em !important;
-            background: linear-gradient(135deg, #1E3A5F 0%, #2563EB 100%) !important;
+            background: linear-gradient(90deg, #00c6fb 0%, #005bea 100%) !important;
             border: none !important;
             color: #ffffff !important;
-            box-shadow: 0 4px 18px rgba(30,58,95,0.30) !important;
+            box-shadow: 0 4px 15px rgba(0, 91, 234, 0.3) !important;
             white-space: nowrap !important;
             text-align: center !important;
             transition: all 0.18s ease !important;
@@ -686,10 +686,10 @@ def render():
           div[data-testid="stFormSubmitButton"] button:hover,
           button[data-testid="stBaseButton-primary"]:hover,
           button[kind="primary"]:hover {
-            background: linear-gradient(135deg, #162d4a 0%, #1d4ed8 100%) !important;
-            box-shadow: 0 6px 24px rgba(30,58,95,0.45) !important;
+            background: linear-gradient(90deg, #00c6fb 0%, #005bea 100%) !important;
+            box-shadow: 0 6px 20px rgba(0, 91, 234, 0.4) !important;
             color: #ffffff !important;
-            transform: translateY(-1px) !important;
+            transform: translateY(-2px) !important;
           }
         </style>
         """).strip(),

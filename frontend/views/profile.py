@@ -55,7 +55,7 @@ def render():
         """
 <style>
 .pf-wrapper {
-    max-width: 480px;
+    max-width: 500px !important;
     margin: 2rem auto 0 auto;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -68,7 +68,7 @@ def render():
 }
 .pf-header {
     background: linear-gradient(135deg, #20A0D8 0%, #0E5C7A 100%);
-    padding: 2.5rem 2.5rem 1.5rem 2.5rem;
+    padding: 2rem 1.75rem 1.25rem 1.75rem;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -129,10 +129,10 @@ def render():
     border: 1px solid rgba(255,255,255,0.3);
 }
 .pf-body {
-    padding: 2rem 2.5rem 2.5rem 2.5rem;
+    padding: 1.5rem 1.75rem 2rem 1.75rem;
 }
 .pf-section-label {
-    font-size: 0.72rem;
+    font-size: 0.88rem;
     font-weight: 700;
     color: #94A3B8;
     text-transform: uppercase;
@@ -165,19 +165,19 @@ def render():
     min-width: 0;
 }
 .pf-field-label {
-    font-size: 0.78rem;
+    font-size: 0.88rem;
     font-weight: 600;
     color: #94A3B8;
     margin-bottom: 0.2rem;
 }
 .pf-field-value {
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     font-weight: 600;
     color: #1E3A5F;
     word-break: break-word;
 }
 .pf-logout-wrap {
-    max-width: 480px;
+    max-width: 350px;
     margin: 1rem auto 2rem auto;
 }
 .pf-logout-wrap [data-testid="stButton"] button {
@@ -201,10 +201,9 @@ def render():
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="pf-wrapper">', unsafe_allow_html=True)
-
-    # Profile card
-    st.markdown(
+    _, col, _ = st.columns([1, 8, 1])
+    with col:
+        st.markdown(
         f"""
 <div class="pf-card">
 <div class="pf-header">
@@ -277,6 +276,4 @@ def render():
 </div>
 """,
         unsafe_allow_html=True,
-    )
-
-    st.markdown("</div>", unsafe_allow_html=True)  # close pf-wrapper
+        )
