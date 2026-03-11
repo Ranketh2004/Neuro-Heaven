@@ -26,6 +26,52 @@ _CAT_BASE_COLS = {
     "substance_alcohol_abuse", "family_history",
 }
 
+# Clinical profile metadata for each ASM (evidence-based, ILAE 2022 guidelines)
+_ASM_CLINICAL_PROFILE: Dict[str, Dict[str, str]] = {
+    "levetiracetam": {
+        "tier": "First-line",
+        "spectrum": "Broad (Focal + Generalized)",
+        "mechanism": "SV2A synaptic vesicle modulator",
+        "teratogenic_risk": "Low",
+        "monitoring": "Mood/behaviour; renal dose adjustment",
+    },
+    "lamotrigine": {
+        "tier": "First-line",
+        "spectrum": "Broad (Focal + Generalized)",
+        "mechanism": "Voltage-gated Na⁺ channel blocker",
+        "teratogenic_risk": "Low–Moderate",
+        "monitoring": "Titration schedule; rash (SJS risk); drug interactions",
+    },
+    "valproate": {
+        "tier": "First-line (Generalised epilepsy)",
+        "spectrum": "Broad (Generalised > Focal)",
+        "mechanism": "Na⁺ channel / GABA / T-Ca²⁺ modulator",
+        "teratogenic_risk": "High (VALPROATE PREVENT program compliance required)",
+        "monitoring": "LFTs, weight, ammonia, teratogenicity counselling",
+    },
+    "carbamazepine": {
+        "tier": "First-line (Focal epilepsy only)",
+        "spectrum": "Focal only — avoid in generalised",
+        "mechanism": "Voltage-gated Na⁺ channel blocker",
+        "teratogenic_risk": "Moderate",
+        "monitoring": "Na⁺ levels (hyponatraemia), CBC, LFTs, drug interactions (enzyme inducer)",
+    },
+    "phenobarbital": {
+        "tier": "Third-line (or resource-limited settings)",
+        "spectrum": "Broad",
+        "mechanism": "GABA-A potentiator",
+        "teratogenic_risk": "Moderate",
+        "monitoring": "Sedation, cognition, dependence; enzyme inducer",
+    },
+    "phenytoin": {
+        "tier": "Second/Third-line (narrow therapeutic index)",
+        "spectrum": "Focal ± Generalised tonic-clonic",
+        "mechanism": "Voltage-gated Na⁺ channel blocker",
+        "teratogenic_risk": "Moderate",
+        "monitoring": "Drug levels, gingival hyperplasia, ataxia, cardiac (if IV), enzyme inducer",
+    },
+}
+
 FRIENDLY_NAMES = {
     "age": "Current age",
     "age_of_onset": "Age at seizure onset",
@@ -190,7 +236,8 @@ def _norm_yes(v: Any) -> bool:
 
 def apply_asm_rules(
     patient: Dict[str, Any], asm: str, base_prob: float
-) -> Tuple[float, float, List[str]]:
+) -> Tuple[float, float, List[str], List[str]]:
+    """Return (adjusted_prob, penalty, caution_notes, benefit_notes)."""
     asm = _norm_str(asm)
     sex = _norm_str(patient.get("sex"))
     seizure_type = _norm_str(patient.get("seizure_type"))
@@ -207,95 +254,203 @@ def apply_asm_rules(
     head_trauma = _norm_yes(patient.get("head_trauma"))
     cns_inf = _norm_yes(patient.get("cns_infection"))
     alcohol = _norm_yes(patient.get("substance_alcohol_abuse"))
+    febrile = _norm_yes(patient.get("febrile_convulsion"))
+    fam_hx = _norm_yes(patient.get("family_history"))
+
+    try:
+        sc = float(patient.get("pretreatment_seizure_count", 0) or 0)
+    except Exception:
+        sc = 0.0
+
+    is_focal = seizure_type in {"focal", "focal_onset", "partial"}
+    is_generalised = seizure_type in {"generalized", "generalised", "absence", "myoclonic", "tonic-clonic", "tonic_clonic", "jme"}
+    is_myoclonic = seizure_type in {"myoclonic", "jme"}
+    is_wocbp = (sex == "female" and age is not None and age < 50)
 
     penalty = 0.0
-    reasons: List[str] = []
+    caution_notes: List[str] = []
+    benefit_notes: List[str] = []
 
-    if asm == "valproate":
-        if sex == "female" and age is not None and age < 50:
-            penalty += 0.25
-            reasons.append("Valproate: caution in females of childbearing potential (teratogenic risk).")
-        if seizure_type == "generalized":
-            penalty -= 0.05
-            reasons.append("Valproate: can be effective in generalized epilepsy (context-dependent).")
-        if alcohol:
-            penalty += 0.05
-            reasons.append("Valproate: substance/alcohol use may complicate adherence and hepatic monitoring.")
-        if int_dis:
-            penalty += 0.03
-            reasons.append("Valproate: monitor sedation/cognitive effects if vulnerable.")
-
+    # ------------------------------------------------------------------
+    # Levetiracetam
+    # ------------------------------------------------------------------
     if asm == "levetiracetam":
+        # Benefits
+        if is_focal:
+            penalty -= 0.06
+            benefit_notes.append("Preferred broad-spectrum option for focal onset seizures (ILAE Grade A).")
+        if is_generalised and not is_myoclonic:
+            penalty -= 0.04
+            benefit_notes.append("Broad-spectrum; suitable for generalised tonic-clonic seizures — ILAE-endorsed option for generalised epilepsy.")
+        if is_myoclonic:
+            penalty -= 0.03
+            benefit_notes.append("Effective adjunct for myoclonic seizures in JME; first alternative when valproate is contraindicated.")
+        if is_wocbp:
+            penalty -= 0.07
+            benefit_notes.append("Preferred in women of childbearing potential — no significant teratogenic risk.")
+        if head_trauma or cns_inf:
+            penalty -= 0.04
+            benefit_notes.append("Broad-spectrum; frequently used in structural/acquired epilepsy (trauma, CNS infection).")
+        if febrile:
+            penalty -= 0.02
+            benefit_notes.append("Reasonable option in patients with history of febrile convulsions.")
+        # Cautions
         if psych:
             penalty += 0.12
-            reasons.append("Levetiracetam: may worsen irritability/mood in some patients; monitor psychiatric symptoms.")
-        if head_trauma or cns_inf:
-            penalty -= 0.03
-            reasons.append("Levetiracetam: broad-spectrum option; often used in structural/acquired epilepsy contexts.")
+            caution_notes.append("Levetiracetam: psychiatric/mood side-effects (irritability, depression) — monitor closely.")
         if alcohol:
-            penalty += 0.03
-            reasons.append("Levetiracetam: substance/alcohol use may increase behavioral risk and reduce adherence.")
+            penalty += 0.04
+            caution_notes.append("Levetiracetam: alcohol/substance use increases behavioural risk and reduces adherence.")
 
-    if asm == "lamotrigine":
+    # ------------------------------------------------------------------
+    # Lamotrigine
+    # ------------------------------------------------------------------
+    elif asm == "lamotrigine":
+        # Benefits
+        if is_focal:
+            penalty -= 0.04
+            benefit_notes.append("Effective for focal onset seizures; well-tolerated long-term.")
+        if seizure_type == "absence":
+            penalty -= 0.06
+            benefit_notes.append("Effective for childhood and juvenile absence epilepsy; second-line after valproate per ILAE 2022.")
+        elif is_generalised and not is_myoclonic:
+            penalty -= 0.03
+            benefit_notes.append("Reasonable for generalised tonic-clonic seizures as adjunct or monotherapy; second-line option.")
+        if is_wocbp or sex == "female":
+            penalty -= 0.05
+            benefit_notes.append("Preferred in women of childbearing potential — comparatively lower teratogenic risk.")
         if psych:
             penalty -= 0.05
-            reasons.append("Lamotrigine: often mood-neutral/mood-friendly; monitor response.")
-        try:
-            sc = float(patient.get("pretreatment_seizure_count", 0))
-        except Exception:
-            sc = 0.0
+            benefit_notes.append("Mood-stabilising properties; may benefit patients with comorbid mood disorders.")
+        # Cautions
+        if is_myoclonic:
+            penalty += 0.12
+            caution_notes.append("Lamotrigine: may worsen myoclonic seizures (JME) — avoid or use with caution.")
         if sc >= 30:
             penalty += 0.05
-            reasons.append("Lamotrigine: slow titration may delay control in high-burden cases.")
+            caution_notes.append("Lamotrigine: mandatory slow titration may delay adequate seizure control in high-burden cases.")
+        if sc >= 20 and not is_myoclonic:
+            penalty += 0.02
+            caution_notes.append("Lamotrigine: titration schedule should be carefully observed; interaction with valproate alters levels.")
 
-    if asm == "carbamazepine":
-        if seizure_type == "generalized":
-            penalty += 0.18
-            reasons.append("Carbamazepine: avoid in generalized epilepsy due to potential seizure worsening.")
+    # ------------------------------------------------------------------
+    # Valproate
+    # ------------------------------------------------------------------
+    elif asm == "valproate":
+        # Benefits — is_myoclonic must be checked first; it is a subset of is_generalised
+        if is_myoclonic:
+            penalty -= 0.12
+            benefit_notes.append("Drug of choice for myoclonic seizures and JME — superior efficacy over LTG/LEV for myoclonic and absence components (ILAE Grade A).")
+        elif is_generalised:
+            penalty -= 0.10
+            benefit_notes.append("First-choice for generalised epilepsy syndromes (absence, generalised tonic-clonic) — broadest spectrum evidence base (ILAE Grade A).")
+        if fam_hx:
+            penalty -= 0.02
+            benefit_notes.append("Broad-spectrum coverage useful in idiopathic generalised epilepsy with family history.")
+        # Cautions
+        if is_wocbp:
+            penalty += 0.25
+            caution_notes.append("Valproate: HIGH teratogenic risk in females of childbearing potential (neural tube defects, neurodevelopmental effects) — AVOID unless no alternatives; comply with VALPROATE PREVENT programme.")
         if alcohol:
             penalty += 0.05
-            reasons.append("Carbamazepine: interactions/adherence concerns; review co-medications.")
+            caution_notes.append("Valproate: alcohol use complicates hepatic monitoring and adherence (hepatotoxicity risk).")
+        if int_dis:
+            penalty += 0.04
+            caution_notes.append("Valproate: cognitive/sedation burden may be additive — monitor closely in intellectual disability.")
+
+    # ------------------------------------------------------------------
+    # Carbamazepine
+    # ------------------------------------------------------------------
+    elif asm == "carbamazepine":
+        # Benefits
+        if is_focal:
+            penalty -= 0.08
+            benefit_notes.append("First-line for focal onset epilepsy; well-established long-term data.")
+        # Cautions
+        if is_generalised:
+            penalty += 0.20
+            caution_notes.append("Carbamazepine: CONTRAINDICATED in generalised epilepsy — may aggravate absence, myoclonic, and atonic seizures.")
+        if seizure_type == "mixed":
+            penalty += 0.12
+            caution_notes.append("Carbamazepine: caution in mixed seizure disorder — risk of aggravating any generalised (absence, myoclonic) components; consider a broad-spectrum agent.")
+        if age is not None and age >= 65:
+            penalty += 0.07
+            caution_notes.append("Carbamazepine: elderly — higher risk of hyponatraemia, dizziness, falls, and drug interactions.")
         if cerebro:
             penalty += 0.06
-            reasons.append("Carbamazepine: caution with cerebrovascular disease; review tolerability/interactions.")
-        if age is not None and age >= 65:
-            penalty += 0.06
-            reasons.append("Carbamazepine: elderly—higher tolerability and hyponatremia risk.")
+            caution_notes.append("Carbamazepine: caution with cerebrovascular disease — tolerability and interaction profile.")
+        if alcohol:
+            penalty += 0.05
+            caution_notes.append("Carbamazepine: enzyme induction alters drug levels; adherence concerns with alcohol use.")
 
-    if asm == "phenobarbital":
+    # ------------------------------------------------------------------
+    # Phenobarbital
+    # ------------------------------------------------------------------
+    elif asm == "phenobarbital":
+        # Benefits — limited; used in resource-limited/refractory settings
+        if head_trauma or cns_inf:
+            penalty -= 0.01
+            benefit_notes.append("Phenobarbital: historically used in acute structural epilepsy contexts; broad-spectrum.")
+        # Cautions
         if int_dis:
             penalty += 0.18
-            reasons.append("Phenobarbital: sedation/cognitive effects may be problematic; consider alternatives if feasible.")
+            caution_notes.append("Phenobarbital: significant sedation and cognitive impairment — strongly consider alternatives in intellectual disability.")
         if psych:
-            penalty += 0.08
-            reasons.append("Phenobarbital: may worsen mood/behavior; monitor psychiatric symptoms.")
+            penalty += 0.10
+            caution_notes.append("Phenobarbital: may worsen depression and behavioural symptoms — avoid in psychiatric comorbidity where possible.")
         if age is not None and age >= 65:
             penalty += 0.18
-            reasons.append("Phenobarbital: elderly—sedation and falls risk; avoid if possible.")
+            caution_notes.append("Phenobarbital: elderly — high sedation, falls risk, paradoxical agitation; generally avoided.")
         if cerebro:
             penalty += 0.10
-            reasons.append("Phenobarbital: caution in cerebrovascular disease; sedation/falls concern.")
+            caution_notes.append("Phenobarbital: sedation and falls risk particularly elevated with cerebrovascular disease.")
         if alcohol:
-            penalty += 0.08
-            reasons.append("Phenobarbital: avoid with alcohol/sedatives (CNS/respiratory depression risk).")
+            penalty += 0.10
+            caution_notes.append("Phenobarbital: combined CNS/respiratory depression with alcohol — avoid.")
+        if not (int_dis or psych or (age is not None and age >= 65) or cerebro or alcohol):
+            caution_notes.append("Phenobarbital: third-line agent — consider only after LEV/LTG/VPA failure; enzyme-inducing, sedating.")
 
-    if asm == "phenytoin":
+    # ------------------------------------------------------------------
+    # Phenytoin
+    # ------------------------------------------------------------------
+    elif asm == "phenytoin":
+        # Benefits — mainly acute/IV use
+        if is_focal and not (age is not None and age >= 65) and not cerebro:
+            benefit_notes.append("Phenytoin: option for focal epilepsy in the absence of tolerability contraindications.")
+        # Cautions
+        if is_myoclonic or seizure_type == "absence":
+            penalty += 0.22
+            caution_notes.append("Phenytoin: CONTRAINDICATED — known to aggravate absence and myoclonic seizures; use a broad-spectrum agent (valproate, lamotrigine, levetiracetam).")
         if age is not None and age >= 65:
-            penalty += 0.12
-            reasons.append("Phenytoin: elderly—higher toxicity risk due to PK variability and interactions.")
+            penalty += 0.13
+            caution_notes.append("Phenytoin: elderly — narrow therapeutic index, high inter-individual PK variability, ataxia, falls risk.")
         if cerebro:
-            penalty += 0.08
-            reasons.append("Phenytoin: caution in cerebrovascular disease; interactions/side-effects.")
+            penalty += 0.09
+            caution_notes.append("Phenytoin: cardiac conduction effects and drug interactions are heightened in cerebrovascular disease.")
         if alcohol:
-            penalty += 0.06
-            reasons.append("Phenytoin: alcohol can alter levels and adherence; monitor if used.")
+            penalty += 0.07
+            caution_notes.append("Phenytoin: alcohol causes unpredictable level fluctuations and impairs adherence.")
         if int_dis:
-            penalty += 0.06
-            reasons.append("Phenytoin: cognitive side-effects possible; monitor function.")
+            penalty += 0.07
+            caution_notes.append("Phenytoin: cognitive side-effects and cosmetic effects (gingival hyperplasia) are poorly tolerated.")
+        if not caution_notes and not benefit_notes:
+            caution_notes.append("Phenytoin: narrow therapeutic index and non-linear kinetics require therapeutic drug monitoring.")
 
+    # Floor penalty so a cascade of benefits does not go below −0.10
     penalty = max(penalty, -0.10)
     adjusted = float(np.clip(base_prob - penalty, 0.0, 0.95))
-    return adjusted, float(penalty), reasons
+    return adjusted, float(penalty), caution_notes, benefit_notes
+
+
+def _suitability_class(penalty: float) -> str:
+    """Classify a net penalty into a clinical suitability tier."""
+    if penalty < -0.02:
+        return "preferred"
+    if penalty <= 0.05:
+        return "acceptable"
+    if penalty <= 0.15:
+        return "caution"
+    return "avoid"
 
 
 # ============================================================
@@ -366,39 +521,128 @@ def _clinical_phrase_from_feature(feature_label: str, patient: Dict[str, Any]) -
 
     if "pre-treatment seizure" in fl or "pretreatment seizure" in fl:
         sc = _value_str(patient, "pretreatment_seizure_count")
-        return f"Seizure burden before treatment (reported {sc})"
-    if "number of prior asms" in fl or "prior asms" in fl:
+        try:
+            n = int(float(sc)) if sc else 0
+            context = "low burden — favours better response" if n <= 3 else (
+                "moderate burden" if n <= 10 else "high burden — associated with reduced likelihood of seizure freedom"
+            )
+        except Exception:
+            context = ""
+        return f"Pre-treatment seizure count (n={sc}; {context})" if context else f"Pre-treatment seizure count (n={sc})"
+
+    if "number of prior asms" in fl or "prior asms" in fl or "prior_asm" in fl:
         pa = _value_str(patient, "prior_asm_exposure_count")
-        return f"History of prior anti-seizure medications tried (reported {pa})"
+        try:
+            n = int(float(pa)) if pa else 0
+            context = "no prior treatment — favourable prognostic indicator" if n == 0 else (
+                f"{n} prior ASM(s) — each failed ASM reduces probability of subsequent remission"
+            )
+        except Exception:
+            context = ""
+        return f"Prior ASM exposure ({context})" if context else f"Prior anti-seizure medications tried (n={pa})"
+
     if "age at seizure onset" in fl:
         ao = _value_str(patient, "age_of_onset")
-        return f"Age at seizure onset (reported {ao})"
+        try:
+            age_val = float(ao) if ao else None
+            if age_val is not None:
+                if age_val < 2:
+                    context = "neonatal/infantile onset — associated with complex underlying aetiology"
+                elif age_val < 12:
+                    context = "childhood onset — prognosis varies widely by syndrome"
+                elif age_val < 18:
+                    context = "adolescent onset — consider idiopathic generalised syndromes"
+                else:
+                    context = "adult onset — structural/metabolic aetiology more likely"
+            else:
+                context = ""
+        except Exception:
+            context = ""
+        return f"Age at seizure onset ({ao} yrs; {context})" if context else f"Age at seizure onset ({ao} yrs)"
+
     if fl == "current age" or "current age" in fl:
         age = _value_str(patient, "age")
-        return f"Current age (reported {age})"
+        return f"Current patient age ({age} yrs)"
+
     if "duration since onset" in fl:
         try:
             age = float(patient.get("age"))
             onset = float(patient.get("age_of_onset"))
-            return f"Epilepsy duration (approx. {max(age - onset, 0):.0f} years)"
+            dur = max(age - onset, 0)
+            context = "recent onset — early treatment response is a strong outcome predictor" if dur <= 2 else (
+                "long-standing epilepsy — chronic course may reflect treatment-refractory disease" if dur > 10 else ""
+            )
+            return f"Epilepsy duration ({dur:.0f} yrs; {context})" if context else f"Epilepsy duration ({dur:.0f} yrs)"
         except Exception:
             return "Epilepsy duration"
+
     if "seizure frequency relative to age" in fl or "seizure_frequency_risk" in fl:
-        return "Seizure burden relative to age (higher burden generally worsens prognosis)"
+        return "Seizure frequency relative to age (high frequency/age ratio worsens prognosis)"
+
     if "overall seizure burden" in fl or "seizure_burden_log" in fl:
-        return "Overall seizure burden (higher burden generally worsens prognosis)"
+        return "Overall seizure burden score (greater burden reduces likelihood of pharmacological remission)"
+
+    if "comorbidity" in fl:
+        return "Comorbidity burden (psychiatric, cognitive, or medical comorbidities reduce seizure-freedom probability)"
+
+    if "clinical_risk_index" in fl or "clinical risk index" in fl:
+        return "Clinical risk index (composite of structural lesion, EEG, seizure burden, comorbidity, and prior treatment)"
+
+    if "high_prior_asm" in fl or "more than one prior" in fl:
+        return "History of ≥2 prior ASMs — significantly associated with drug-resistant epilepsy"
+
+    if "poly_asm" in fl or "three or more prior" in fl:
+        return "≥3 prior ASMs (drug-resistant epilepsy criteria met — consider tertiary evaluation)"
+
+    if "structural_lesion" in fl or "structural lesion" in fl:
+        return "Structural MRI lesion (structural aetiology reduces probability of pharmacological remission)"
+
+    if "eeg_epileptic" in fl or ("eeg" in fl and "flag" in fl):
+        return "Epileptiform EEG activity (ictal/interictal abnormality correlates with active epilepsy)"
+
     if "eeg" in fl:
         eeg = _value_str(patient, "eeg_status_detail")
-        return f"EEG status (reported {eeg})"
+        eeg_map = {
+            "focal": "focal interictal discharges — supports focal epilepsy diagnosis",
+            "generalized": "generalised discharges — supports idiopathic generalised epilepsy",
+            "multifocal": "multifocal discharges — may indicate diffuse/structural aetiology",
+            "normal": "normal EEG — may reduce diagnostic certainty",
+        }
+        eeg_clean = str(eeg or "").strip().lower()
+        context = eeg_map.get(eeg_clean, "")
+        return f"EEG findings ({eeg}; {context})" if context else f"EEG findings ({eeg})"
+
     if "mri lesion type" in fl or "structural lesion" in fl:
         mri = _value_str(patient, "mri_lesion_type")
         if mri and str(mri).strip().lower() not in {"select", "select an option"}:
-            return f"MRI lesion type (reported {mri})"
+            mri_map = {
+                "hippocampal_sclerosis": "hippocampal sclerosis — surgically remediable; pharmacological remission less likely",
+                "tumor": "tumour-related epilepsy — seizure freedom depends on extent of surgical resection",
+                "cortical_dysplasia": "focal cortical dysplasia — often treatment-resistant; surgical evaluation warranted",
+            }
+            context = mri_map.get(str(mri).strip().lower(), "")
+            return f"MRI lesion ({mri}; {context})" if context else f"MRI lesion type ({mri})"
         return "MRI lesion information"
+
     if "mri lesion type:" in feature_label:
         return feature_label.replace("MRI lesion type:", "MRI finding:")
+
     if "seizure type:" in feature_label:
-        return feature_label.replace("Seizure type:", "Seizure type:")
+        st_map = {
+            "Seizure type: Focal": "Seizure type: Focal (focal onset — aetiology drives prognosis)",
+            "Seizure type: Generalized": "Seizure type: Generalised (idiopathic generalised epilepsy syndromes often respond well to broad-spectrum agents)",
+            "Seizure type: Myoclonic": "Seizure type: Myoclonic (JME — typically controlled with VPA/LEV/LTG; lifelong treatment often required)",
+        }
+        return st_map.get(feature_label, feature_label)
+
+    if "sex" in fl:
+        sex = _value_str(patient, "sex")
+        return f"Biological sex ({sex}) — influences ASM tolerability and teratogenicity considerations"
+
+    if "current asm" in fl:
+        asm = _value_str(patient, "current_asm")
+        return f"Current ASM ({asm}) — efficacy and tolerability profile shapes overall outcome estimate"
+
     return feature_label
 
 
@@ -570,13 +814,19 @@ def _clinician_summary(
 
     if likely:
         impression = (
-            f"Estimated probability of **seizure freedom at 12 months = {pct}** "
-            f"(**{band} likelihood**). This leans toward seizure freedom, but uncertainty remains."
+            f"This patient's clinical profile is associated with a **{pct} estimated probability of "
+            f"seizure freedom at 12 months** ({band} likelihood). The model output favours a positive "
+            f"treatment response; however, this estimate reflects population-level associations and "
+            f"must be interpreted alongside individual clinical context, comorbidity burden, and "
+            f"medication adherence."
         )
     else:
         impression = (
-            f"Estimated probability of **seizure freedom at 12 months = {pct}** "
-            f"(**{band} likelihood**). This leans away from seizure freedom without optimization."
+            f"This patient's clinical profile is associated with a **{pct} estimated probability of "
+            f"seizure freedom at 12 months** ({band} likelihood). The model output suggests suboptimal "
+            f"seizure control is likely without treatment modification. Consider reviewing current ASM "
+            f"selection, adherence, and whether further diagnostic workup (e.g., video-EEG, MRI) "
+            f"or specialist referral is warranted."
         )
 
     supports, against = [], []
@@ -588,11 +838,11 @@ def _clinician_summary(
 
     if shap_doctor and (supports or against):
         if supports:
-            lines.append("**Factors that increased the estimate:**")
+            lines.append("**Clinical factors favouring seizure freedom:**")
             for x in supports:
                 lines.append(f"- {x}")
         if against:
-            lines.append("**Factors that reduced the estimate:**")
+            lines.append("**Clinical factors reducing likelihood of seizure freedom:**")
             for x in against:
                 lines.append(f"- {x}")
         if shap_note:
@@ -600,7 +850,7 @@ def _clinician_summary(
         lines.append("")
 
     if asm_notes:
-        lines.append("**Medication note:**")
+        lines.append("**Current ASM — clinical considerations:**")
         for n in asm_notes[:3]:
             lines.append(f"- {n}")
         lines.append("")
@@ -611,10 +861,12 @@ def _clinician_summary(
             lines.append(f"- {f}")
         lines.append("")
 
-    lines.append("**Next checks :**")
-    lines.append("- Confirm seizure count timeframe and medication adherence.")
-    lines.append("- Ensure EEG/MRI are formally reviewed and correlate with semiology.")
-    lines.append("- Reassess at follow-up with early response (first 4-12 weeks often changes prognosis).")
+    lines.append("**Recommended next steps:**")
+    lines.append("- Verify seizure frequency data and confirm current medication adherence before acting on this estimate.")
+    lines.append("- Ensure EEG and MRI findings have been formally reported and correlated with clinical semiology.")
+    lines.append("- Reassess treatment response at 4–12 weeks; early seizure reduction is a strong independent predictor of 12-month outcome.")
+    lines.append("- If two or more appropriately dosed ASMs have failed, consider referral to a tertiary epilepsy centre for comprehensive evaluation.")
+    lines.append("- Document adverse effects, quality-of-life impact, and seizure severity at each clinical review, not seizure count alone.")
     lines.append("")
 
     return "\n".join(lines)
@@ -692,7 +944,8 @@ class ASMPredictionService:
         # ASM clinical rule adjustment
         asm = sample_patient.get("current_asm")
         if asm is not None and str(asm).strip() != "":
-            prob_final, penalty, rule_reasons = apply_asm_rules(sample_patient, str(asm), prob_model)
+            prob_final, penalty, rule_cautions, rule_benefits = apply_asm_rules(sample_patient, str(asm), prob_model)
+            rule_reasons = rule_cautions + rule_benefits
         else:
             prob_final, penalty, rule_reasons = prob_model, 0.0, []
 
@@ -730,4 +983,50 @@ class ASMPredictionService:
                 "rule_reasons_raw": rule_reasons,
                 "reliability_flags": flags,
             },
+        }
+
+    def rank_asms(self, patient: Dict[str, Any]) -> Dict[str, Any]:
+        """Rank all available ASMs by rule-adjusted seizure-freedom probability."""
+        df_one = pd.DataFrame([{k: (np.nan if v is None else v) for k, v in patient.items()}])
+        df_one = self._align_columns(df_one)
+        df_one = self._coerce_numeric(df_one)
+
+        # Base probability is the same for every ASM — reflects patient clinical profile.
+        prob_model = float(self.model.predict_proba(df_one)[0, 1])
+
+        asms_to_rank = self.available_asms if self.available_asms else [
+            "Levetiracetam", "Lamotrigine", "Valproate",
+            "Phenobarbital", "Carbamazepine", "Phenytoin",
+        ]
+
+        rankings: List[Dict[str, Any]] = []
+        for asm in asms_to_rank:
+            adjusted_prob, penalty, caution_notes, benefit_notes = apply_asm_rules(patient, asm, prob_model)
+            profile = _ASM_CLINICAL_PROFILE.get(asm.lower(), {})
+            rankings.append({
+                "asm": asm,
+                "prob_adjusted": float(adjusted_prob),
+                "prob_base": float(prob_model),
+                "penalty": float(penalty),
+                "caution_notes": caution_notes,
+                "benefit_notes": benefit_notes,
+                "rule_notes": caution_notes,   # backward-compat alias
+                "pred_label": int(adjusted_prob >= self.threshold),
+                "tier": profile.get("tier", ""),
+                "spectrum": profile.get("spectrum", ""),
+                "teratogenic_risk": profile.get("teratogenic_risk", ""),
+                "monitoring": profile.get("monitoring", ""),
+                "suitability": _suitability_class(penalty),
+            })
+
+        rankings.sort(key=lambda x: x["prob_adjusted"], reverse=True)
+
+        flags = _reliability_flags(patient)
+        applicability = _applicability_indicator(patient)
+
+        return {
+            "rankings": rankings,
+            "prob_base": float(prob_model),
+            "reliability_flags": flags,
+            "applicability_indicator": int(applicability),
         }
