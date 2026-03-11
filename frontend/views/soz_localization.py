@@ -199,7 +199,7 @@ def render():
         else:
             st.markdown('<div class="soz-wrapper">', unsafe_allow_html=True)
             st.markdown('<div class="nh-title">Seizure Onset Zone Localization</div>', unsafe_allow_html=True)
-            st.markdown('<div class="nh-sub">Drag and drop an EEG file or browse. Accepted formats: .edf, .csv</div>', unsafe_allow_html=True)
+            st.markdown('<div class="nh-sub">Drag and drop an EEG file or browse. Accepted formats: .edf</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="card upload-card">', unsafe_allow_html=True)
             st.markdown('<div class="upload-area">', unsafe_allow_html=True)
@@ -211,7 +211,7 @@ def render():
                     unsafe_allow_html=True
                 )
                 st.markdown(
-                    '<div class="upload-meta"><span class="chip">Accepted: EDF, CSV</span><span class="chip">Max 500MB</span><span class="chip">HIPAA-like demo</span></div>',
+                    '<div class="upload-meta"><span class="chip">Accepted: EDF</span><span class="chip">Max 500MB</span></div>',
                     unsafe_allow_html=True
                 )
                 st.markdown(
@@ -237,10 +237,10 @@ def render():
                 uploader_key = f"eeg_uploader_{st.session_state['uploader_version']}"
                 uploaded = st.file_uploader(
                     "Upload EEG File",
-                    type=["edf", "csv"],
+                    type=["edf"],
                     label_visibility="collapsed",
                     accept_multiple_files=False,
-                    help="Upload an EDF or CSV file containing EEG data",
+                    help="Upload an EDF file containing EEG data",
                     key=uploader_key,
                 )
 
