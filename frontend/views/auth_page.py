@@ -15,6 +15,18 @@ def _set_page(slug: str):
     st.query_params["page"] = slug
     st.rerun()
 
+def _sync_auth_mode_from_query():
+    """Sync auth mode with URL query (?auth=signin or ?auth=signup)."""
+    auth_q = st.query_params.get("auth", None)
+
+    if auth_q:
+        if isinstance(auth_q, list):
+            auth_q = auth_q[0]
+
+        if auth_q in ["signin", "signup"]:
+            if st.session_state.get("auth_mode") != auth_q:
+                st.session_state["auth_mode"] = auth_q
+
 def open(mode: str = "signin"):
     st.session_state["auth_open"] = True
     st.session_state["auth_mode"] = mode
@@ -260,11 +272,30 @@ def render_dialog():
             background:#f8fafc !important;
             color:#64748b !important;
         }
+
+        /* Auth switch buttons (Sign up / Sign in) */
+        div[data-testid="stButton"] button[key="switch_to_signup"],
+        div[data-testid="stButton"] button[key="switch_to_signin"]{
+            width: 120px !important;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            background: transparent !important;
+            color: #0284c7 !important;
+            font-weight: 700 !important;
+        }
+
+        div[data-testid="stButton"] button[key="switch_to_signup"]:hover,
+        div[data-testid="stButton"] button[key="switch_to_signin"]:hover{
+            background: transparent !important;
+            text-decoration: underline !important;
+}
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+    _sync_auth_mode_from_query()
     mode = st.session_state.get("auth_mode", "signin")
 
     spacer, btn_col = st.columns([0.92, 0.08])
@@ -328,13 +359,18 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
-        page = st.query_params.get("page", ["home"])
-        page = page[0] if isinstance(page, list) else page
-        signup_href = f'?page={page}&auth=signup'
-        st.markdown(
-            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Don't have an account? <a href=\"{signup_href}\" target=\"_self\" onclick=\"window.location.href='{signup_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign up</a></div>",
-            unsafe_allow_html=True,
-        )
+        col1, col2 = st.columns([3,1])
+
+        with col1:
+            st.markdown(
+                "<div style='text-align:right;margin-top:8px;'>Don't have an account?</div>",
+                unsafe_allow_html=True
+            )
+
+        with col2:
+            if st.button("Sign up", key="switch_to_signup"):
+                st.session_state["auth_mode"] = "signup"
+                st.rerun()
 
     else:
         st.markdown('<div class="auth-title">Create an account</div>', unsafe_allow_html=True)
@@ -379,12 +415,17 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
-        page = st.query_params.get("page", ["home"])
-        page = page[0] if isinstance(page, list) else page
-        signin_href = f'?page={page}&auth=signin'
-        st.markdown(
-            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Already have an account? <a href=\"{signin_href}\" target=\"_self\" onclick=\"window.location.href='{signin_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign in</a></div>",
-            unsafe_allow_html=True,
-        )
+        col1, col2 = st.columns([3,1])
+
+        with col1:
+            st.markdown(
+                "<div style='text-align:right;margin-top:8px;'>Already have an account?</div>",
+                unsafe_allow_html=True
+            )
+
+        with col2:
+            if st.button("Sign in", key="switch_to_signin"):
+                st.session_state["auth_mode"] = "signin"
+                st.rerun()
 
     st.markdown("</div></div>", unsafe_allow_html=True)
