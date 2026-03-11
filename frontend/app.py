@@ -8,7 +8,7 @@ import extra_streamlit_components as stx
 from utils.google_oauth import GoogleOAuth
 from utils.api_client import post, get
 
-from views import home, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page, profile
+from views import home, dashboard, asm_response, eeg_diagnosis, mri_detection, soz_localization, auth_page, profile
 
 
 LOGO_PATH = Path("assets/logo.png")
@@ -153,11 +153,15 @@ if token:
     ls_set("nh_token", token)
     ls_set("nh_user", json.dumps(user or {}))
 
-PROTECTED_PAGES = {"eeg", "soz", "mri", "asm", "profile"}
+PROTECTED_PAGES = {"dashboard", "eeg", "soz", "mri", "asm", "profile"}
 if (not token) and (current_page in PROTECTED_PAGES):
     st.session_state["pending_page"] = current_page
     auth_page.open("signin")
     go_to("home")
+
+# Redirect authenticated users landing on the public home page to the dashboard
+if token and current_page == "home":
+    go_to("dashboard")
 
 logo_img_src = None
 if LOGO_PATH.exists():
@@ -165,6 +169,8 @@ if LOGO_PATH.exists():
     logo_img_src = f"data:image/png;base64,{logo_b64}"
 
 def _svg(icon_name: str) -> str:
+    if icon_name == "dashboard":
+        return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>'
     if icon_name == "home":
         return '<svg class="nh-ico" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 10.5L12 3l9 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 9.5V21h14V9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
     if icon_name == "pulse":
@@ -728,7 +734,7 @@ if token:
         )
 
         nav_items = [
-            ("home", "home", "Home", "Overview"),
+            ("dashboard", "dashboard", "Neuro Hub", "Module Overview"),
             ("eeg", "brain", "EEG Diagnosis", "Epilepsy Diagnosis"),
             ("soz", "pulse", "SOZ Localization", "EEG Graph Analysis"),
             ("mri", "scan", "MRI Detection", "Lesion Analysis"),
@@ -861,6 +867,8 @@ current_page = st.session_state.get("page", "home")
 
 if current_page == "home":
     home.render()
+elif current_page == "dashboard":
+    dashboard.render()
 elif current_page == "eeg":
     eeg_diagnosis.render()
 elif current_page == "soz":
