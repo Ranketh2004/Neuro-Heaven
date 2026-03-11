@@ -92,8 +92,8 @@ class MRIFCDInferenceService:
         Run the full pipeline: preprocess → predict → Grad-CAM.
 
         Returns dict with:
-          fcd_probability, prediction, image_b64 (Grad-CAM overlay),
-          best_slice_info, num_patches
+          fcd_probability, prediction, image_b64 (MRI slice with aligned Grad-CAM overlay),
+          mri_b64 (original MRI slice), best_slice_info, num_patches
         """
         X, meta = preprocess_mri_for_inference(flair_path, t1_path)
 
@@ -107,35 +107,66 @@ class MRIFCDInferenceService:
         heatmap = self._gradcam_heatmap(tf.convert_to_tensor(best_patch))
         heatmap = cv2.resize(heatmap, (self.img_size, self.img_size), interpolation=cv2.INTER_LINEAR)
 
-        # Build overlay image
-        flair_channel = best_patch[0, :, :, 0]  # FLAIR channel of best patch
-        overlay = self._overlay_heatmap(flair_channel, heatmap)
-        overlay_b64 = self._array_to_b64_png(overlay)
-
-        # Full brain slice with detection region circled (only if FCD detected)
+        # Get full brain slice information
         info = meta["slice_info"][max_idx]
         flair3d = meta["flair3d_normed"]          # (H, W, D), already 0-1
         full_slice = flair3d[:, :, info["z"]]     # full axial slice
         h, w = full_slice.shape
-        # Convert to RGB uint8
+        
+        # Create full-sized heatmap aligned with MRI slice
+        full_heatmap = np.zeros((h, w))
+        cy, cx = info["cy"], info["cx"]
+        patch_half = self.img_size // 2
+        
+        # Calculate patch boundaries on full slice
+        y_start = max(0, cy - patch_half)
+        y_end = min(h, cy + patch_half)
+        x_start = max(0, cx - patch_half)
+        x_end = min(w, cx + patch_half)
+        
+        # Calculate corresponding boundaries on heatmap
+        hm_y_start = max(0, patch_half - cy) if cy < patch_half else 0
+        hm_y_end = hm_y_start + (y_end - y_start)
+        hm_x_start = max(0, patch_half - cx) if cx < patch_half else 0
+        hm_x_end = hm_x_start + (x_end - x_start)
+        
+        # Place heatmap at correct location on full slice
+        if (hm_y_end - hm_y_start > 0) and (hm_x_end - hm_x_start > 0):
+            full_heatmap[y_start:y_end, x_start:x_end] = heatmap[hm_y_start:hm_y_end, hm_x_start:hm_x_end]
+
+        # Create original MRI slice (grayscale converted to RGB)
         full_u8 = (full_slice * 255).astype(np.uint8)
         full_rgb = cv2.cvtColor(full_u8, cv2.COLOR_GRAY2BGR)
-        
-        # Only draw circle if FCD is detected (probability >= 0.5)
-        if max_prob >= 0.5:
-            cy, cx = info["cy"], info["cx"]
-            radius = PATCH_SIZE // 2
-            cv2.circle(full_rgb, (cx, cy), radius, (0, 255, 0), 2)
-        
-        # Convert BGR→RGB for PIL
-        full_rgb = cv2.cvtColor(full_rgb, cv2.COLOR_BGR2RGB)
+        full_rgb = cv2.cvtColor(full_rgb, cv2.COLOR_BGR2RGB)  # Convert to RGB
         mri_b64 = self._array_to_b64_png(full_rgb.astype(np.float32) / 255.0)
+
+        # Create MRI slice with Grad-CAM overlay
+        overlay_rgb = self._overlay_heatmap(full_slice, full_heatmap, alpha=0.45)
+        
+        # Add small marker at patch center for reference
+        overlay_rgb_marked = overlay_rgb.copy()
+        # Ensure coordinates are integers and within bounds
+        cx_int = int(cx)
+        cy_int = int(cy) 
+        marker_size = 3
+        
+        # Convert from float array (0-1) to uint8 for cv2 operations
+        overlay_uint8 = (overlay_rgb_marked * 255).astype(np.uint8)
+        
+        # Draw a small white cross at the patch center
+        cv2.line(overlay_uint8, (cx_int-marker_size, cy_int), (cx_int+marker_size, cy_int), (255, 255, 255), 2)
+        cv2.line(overlay_uint8, (cx_int, cy_int-marker_size), (cx_int, cy_int+marker_size), (255, 255, 255), 2)
+        
+        # Convert back to float array (0-1) for encoding
+        overlay_rgb_marked = overlay_uint8.astype(np.float32) / 255.0
+        
+        overlay_b64 = self._array_to_b64_png(overlay_rgb_marked)
 
         return {
             "fcd_probability": round(max_prob, 4),
             "prediction": "FCD Detected" if max_prob >= 0.5 else "No FCD Detected",
-            "image_b64": overlay_b64,
-            "mri_b64": mri_b64,
+            "image_b64": overlay_b64,  # MRI slice with Grad-CAM overlay and marker
+            "mri_b64": mri_b64,        # Original MRI slice
             "best_slice_info": meta["slice_info"][max_idx],
             "num_patches": len(probs),
         }
