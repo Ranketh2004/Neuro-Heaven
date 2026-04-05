@@ -115,25 +115,26 @@ def render_dialog():
             position: relative;
         }
 
-        .auth-card div[data-testid="stButton"]:first-of-type button{
-            position:absolute !important;
-            top: 14px;
-            right: 14px;
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 10px !important;
-            border: 1px solid rgba(226,232,240,0.95) !important;
-            background: #ffffff !important;
-            box-shadow: none !important;
-            color: #94a3b8 !important;
-            font-size: 20px !important;
-            font-weight: 900 !important;
+        /* Close (✕): only tertiary button in this dialog */
+        [data-testid="stDialog"] button[kind="tertiary"]{
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            height: 44px !important;
             padding: 0 !important;
+            border-radius: 12px !important;
+            border: 1px solid rgba(203,213,225,0.95) !important;
+            background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+            color: #64748b !important;
+            font-size: 18px !important;
+            font-weight: 700 !important;
             line-height: 1 !important;
+            box-shadow: 0 1px 2px rgba(15,23,42,0.06) !important;
         }
-        .auth-card div[data-testid="stButton"]:first-of-type button:hover{
-            background:#f8fafc !important;
-            color:#64748b !important;
+        [data-testid="stDialog"] button[kind="tertiary"]:hover{
+            background: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
         }
 
         .auth-title{
@@ -262,22 +263,32 @@ def render_dialog():
         }
         .auth-social a:hover{ background:#f8fafc; }
 
-        button[kind="secondary"]{
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 10px !important;
-            border: 1px solid rgba(226,232,240,0.95) !important;
+        /* Footer "Sign up" / "Sign in": link-style; no border; hover matches base */
+        [data-testid="stDialog"] button[kind="secondary"]{
+            min-width: 0 !important;
+            width: auto !important;
+            max-width: 100% !important;
+            height: auto !important;
+            white-space: nowrap !important;
+            border-radius: 999px !important;
+            padding: 10px 26px !important;
+            font-weight: 700 !important;
+            font-size: 15px !important;
+            border: none !important;
+            outline: none !important;
             background: #ffffff !important;
+            color: #0284c7 !important;
             box-shadow: none !important;
-            color: #94a3b8 !important;
-            font-size: 20px !important;
-            font-weight: 900 !important;
-            padding: 0 !important;
-            line-height: 1 !important;
         }
-        button[kind="secondary"]:hover{
-            background:#f8fafc !important;
-            color:#64748b !important;
+        [data-testid="stDialog"] button[kind="secondary"]:hover,
+        [data-testid="stDialog"] button[kind="secondary"]:active,
+        [data-testid="stDialog"] button[kind="secondary"]:focus,
+        [data-testid="stDialog"] button[kind="secondary"]:focus-visible{
+            background: #ffffff !important;
+            color: #0284c7 !important;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
         }
         </style>
         """,
@@ -286,9 +297,9 @@ def render_dialog():
 
     mode = st.session_state.get("auth_mode", "signin")
 
-    spacer, btn_col = st.columns([0.92, 0.08])
+    spacer, btn_col = st.columns([0.86, 0.14])
     with btn_col:
-        if st.button("✕", key="auth_close_btn"):
+        if st.button("✕", key="auth_close_btn", type="tertiary", width=44):
             close()
             st.rerun()
 
@@ -346,14 +357,14 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
-        col_a, col_b = st.columns([3, 1])
+        col_a, col_b = st.columns([1.2, 1], gap=None)
         with col_a:
             st.markdown(
-                "<div style='margin-top:15px;text-align:right;color:#475569;font-weight:300;'>Don't have an account?</div>",
+                "<div style='margin-top:15px;text-align:right;color:#475569;font-weight:300;white-space:nowrap;padding-right:6px;'>Don't have an account?</div>",
                 unsafe_allow_html=True,
             )
         with col_b:
-            if st.button("Sign up", key="switch_to_signup"):
+            if st.button("Sign up", key="switch_to_signup", type="secondary", width="content"):
                 st.query_params["page"] = "home"
                 st.query_params["auth"] = "signup"
                 st.session_state["auth_mode"] = "signup"
@@ -414,14 +425,14 @@ def render_dialog():
                 unsafe_allow_html=True,
             )
 
-            col_a, col_b = st.columns([3, 1])
+            col_a, col_b = st.columns([1.2, 1], gap=None)
             with col_a:
                 st.markdown(
-                    "<div style='margin-top:15px;text-align:right;color:#475569;font-weight:300;'>Already have an account?</div>",
+                    "<div style='margin-top:15px;text-align:right;color:#475569;font-weight:300;white-space:nowrap;padding-right:6px;'>Already have an account?</div>",
                     unsafe_allow_html=True,
                 )
             with col_b:
-                if st.button("Sign in", key="switch_to_signin"):
+                if st.button("Sign in", key="switch_to_signin", type="secondary", width="content"):
                     st.query_params["page"] = "home"
                     st.query_params["auth"] = "signin"
                     st.session_state["auth_mode"] = "signin"
