@@ -120,7 +120,7 @@ def render():
 
         # Title + subtitle (like screenshot)
         st.markdown('<div class="nh-title">MRI Detection</div>', unsafe_allow_html=True)
-        st.markdown('<div class="nh-sub">Drag and drop an MRI file or browse. Accepted formats: .nii, .nii.gz, .jpg, .png</div>', unsafe_allow_html=True)
+        st.markdown('<div class="nh-sub">Drag and drop an MRI file or browse. Accepted formats: .nii, .nii.gz</div>', unsafe_allow_html=True)
 
         # Main upload card (SOZ structure)
         st.markdown('<div class="card upload-card">', unsafe_allow_html=True)
@@ -140,9 +140,8 @@ def render():
 
             st.markdown(
                 '<div class="upload-meta">'
-                '<span class="chip">Accepted: NIfTI, JPG/PNG</span>'
+                '<span class="chip">Accepted: NIfTI</span>'
                 '<span class="chip">Max 500MB</span>'
-                '<span class="chip">HIPAA-like demo</span>'
                 '</div>',
                 unsafe_allow_html=True
             )
@@ -162,7 +161,6 @@ def render():
                 '<ul class="info-list">'
                 '<li>NIfTI volume: <strong>.nii</strong> or <strong>.nii.gz</strong></li>'
                 '<li>Single 3D brain MRI volume recommended</li>'
-                '<li>Optional demo images: <strong>.jpg/.png</strong></li>'
                 '</ul>'
                 '</div>',
                 unsafe_allow_html=True
@@ -174,10 +172,10 @@ def render():
 
             uploaded_file = st.file_uploader(
                 "Upload MRI File",
-                type=["nii", "gz", "jpg", "jpeg", "png"],  # "gz" covers .nii.gz
+                type=["nii", "gz"],  # "gz" covers .nii.gz
                 label_visibility="collapsed",
                 accept_multiple_files=False,
-                help="Upload .nii / .nii.gz or an image file",
+                help="Upload .nii / .nii.gz",
                 key=uploader_key,
             )
 
@@ -195,9 +193,9 @@ def render():
             lower = name.lower()
 
             # strict validation (because "gz" also matches random .gz files)
-            allowed = (lower.endswith(".nii") or lower.endswith(".nii.gz") or lower.endswith(".jpg") or lower.endswith(".jpeg") or lower.endswith(".png"))
+            allowed = (lower.endswith(".nii") or lower.endswith(".nii.gz"))
             if not allowed:
-                st.error("Unsupported file type. Please upload .nii, .nii.gz, .jpg, .jpeg, or .png.")
+                st.error("Unsupported file type. Please upload .nii, .nii.gz")
                 return
 
             size_kb = (uploaded_file.size / 1024) if hasattr(uploaded_file, "size") else (len(uploaded_file.getvalue()) / 1024)
@@ -245,22 +243,8 @@ def render():
                         num_patches = stats.get("num_patches", 0)
                         
                         # Define threshold for FCD detection
-                        threshold = 0.5
+                        threshold = 0.35
                         fcd_detected = probability >= threshold
-
-                        # Clinical Disclaimer Banner
-                        st.markdown(
-                            '<div style="background: #FFF3CD; border: 1px solid #FFEAA7; border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">'
-                            '<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">'
-                            '<span style="color: #856404; font-size: 1.1rem;">⚠️</span>'
-                            '<strong style="color: #856404;">Clinical Notice</strong>'
-                            '</div>'
-                            '<p style="margin: 0; color: #856404; font-size: 0.9rem;">'
-                            'This tool is designed for decision support and research use. It does not replace expert radiological or neurological assessment.'
-                            '</p>'
-                            '</div>',
-                            unsafe_allow_html=True
-                        )
 
                         # Clinical Summary Card
                         result_color = "#dc3545" if fcd_detected else "#28a745"
@@ -291,14 +275,12 @@ def render():
                             f'</div>'
                             f'<div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: #6c757d; margin-top: 0.25rem;">'
                             f'<span>Low (0%)</span>'
-                            f'<span style="font-weight: 600;">Threshold (50%)</span>'
                             f'<span>High (100%)</span>'
                             f'</div>'
                             f'</div>'
                             
                             # Analysis Details Grid
                             f'<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; font-size: 0.9rem;">'
-                            f'<div><strong>Decision Threshold:</strong> 50%</div>'
                             f'<div><strong>Patches Analyzed:</strong> {num_patches}</div>'
                             f'<div><strong>MRI Slice Reviewed:</strong> {best_slice_info.get("slice_idx", "N/A")}</div>'
                             f'<div><strong>Model Focus Location:</strong> ({best_slice_info.get("x", "N/A")}, {best_slice_info.get("y", "N/A")})</div>'
@@ -425,11 +407,6 @@ def render():
                                 unsafe_allow_html=True
                             )
 
-                        # Collapsible Technical Details
-                        with st.expander("🔧 Technical Details (Advanced Users)"):
-                            st.markdown("**Raw Model Output:**")
-                            st.json(stats)
-
                     except requests.exceptions.RequestException as e:
                         st.error(f"Could not connect to backend: {e}")
 
@@ -439,6 +416,6 @@ def render():
                 st.rerun()
 
         else:
-            st.info("No file selected. Please upload an MRI (.nii/.nii.gz) or image (.jpg/.png).")
+            st.info("No file selected. Please upload an MRI (.nii/.nii.gz).")
 
         st.markdown('</div>', unsafe_allow_html=True)  # mri-page

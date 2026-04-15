@@ -199,7 +199,7 @@ def render():
         else:
             st.markdown('<div class="soz-wrapper">', unsafe_allow_html=True)
             st.markdown('<div class="nh-title">Seizure Onset Zone Localization</div>', unsafe_allow_html=True)
-            st.markdown('<div class="nh-sub">Drag and drop an EEG file or browse. Accepted formats: .edf, .csv</div>', unsafe_allow_html=True)
+            st.markdown('<div class="nh-sub">Drag and drop an EEG file or browse. Accepted formats: .edf</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="card upload-card">', unsafe_allow_html=True)
             st.markdown('<div class="upload-area">', unsafe_allow_html=True)
@@ -211,7 +211,7 @@ def render():
                     unsafe_allow_html=True
                 )
                 st.markdown(
-                    '<div class="upload-meta"><span class="chip">Accepted: EDF, CSV</span><span class="chip">Max 500MB</span><span class="chip">HIPAA-like demo</span></div>',
+                    '<div class="upload-meta"><span class="chip">Accepted: EDF</span><span class="chip">Max 500MB</span></div>',
                     unsafe_allow_html=True
                 )
                 st.markdown(
@@ -237,47 +237,80 @@ def render():
                 uploader_key = f"eeg_uploader_{st.session_state['uploader_version']}"
                 uploaded = st.file_uploader(
                     "Upload EEG File",
-                    type=["edf", "csv"],
+                    type=["edf"],
                     label_visibility="collapsed",
                     accept_multiple_files=False,
-                    help="Upload an EDF or CSV file containing EEG data",
+                    help="Upload an EDF file containing EEG data",
                     key=uploader_key,
                 )
 
+            st.markdown('</div>', unsafe_allow_html=True)  # upload-area
+            st.markdown('</div>', unsafe_allow_html=True)  # card
+
             if uploaded is not None:
-                st.session_state["soz_uploaded_file_name"] = uploaded.name
-                try:
-                    st.toast("Uploading to backend…", icon="🧠")
-                except Exception:
-                    pass
+                file_size_mb = uploaded.size / (1024 * 1024)
+                st.markdown(
+                    f"""
+                    <div class="card" style="margin-top:0.7rem;">
+                        <strong>Selected file:</strong> {uploaded.name}&nbsp;&nbsp;
+                        <strong>Size:</strong> {file_size_mb:.2f} MB
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                try:
-                    files = {"file": (uploaded.name, uploaded.getvalue(), "application/octet-stream")}
-                    resp = requests.post(SOZ_ENDPOINT, files=files, timeout=180)
-                    if resp.status_code != 200:
-                        st.error(f"Backend error ({resp.status_code}): {resp.text}")
-                        st.stop()
+                st.markdown(
+                    """
+                    <style>
+                        div[data-testid="stButton"] > button[kind="primary"] {
+                            background: linear-gradient(135deg, #4A7DFF 0%, #356AC3 100%);
+                            color: #FFFFFF;
+                            border: none;
+                            border-radius: 12px;
+                            padding: 0.75rem 2rem;
+                            font-size: 1.05rem;
+                            font-weight: 700;
+                            letter-spacing: 0.02em;
+                            transition: all 200ms ease;
+                            box-shadow: 0 4px 12px rgba(74, 125, 255, 0.3);
+                        }
+                        div[data-testid="stButton"] > button[kind="primary"]:hover {
+                            background: linear-gradient(135deg, #356AC3 0%, #2A5AB0 100%);
+                            box-shadow: 0 6px 18px rgba(53, 106, 195, 0.4);
+                            transform: translateY(-1px);
+                        }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                    data = resp.json()
-                    st.session_state["soz_result"] = data
+                analyze = st.button("Analyze EEG", type="primary")
 
-                    try:
-                        st.toast("Analysis complete ", icon="✅")
-                    except Exception:
-                        pass
-
-                    try:
-                        st.query_params = {"page": "soz", "soz_mode": "results"}
-                    except Exception:
+                if analyze:
+                    st.session_state["soz_uploaded_file_name"] = uploaded.name
+                    with st.spinner("Uploading and analyzing EEG..."):
                         try:
-                            st.experimental_set_query_params(page="soz", soz_mode="results")
-                        except Exception:
-                            pass
-                    st.rerun()
+                            files = {"file": (uploaded.name, uploaded.getvalue(), "application/octet-stream")}
+                            resp = requests.post(SOZ_ENDPOINT, files=files, timeout=180)
+                            if resp.status_code != 200:
+                                st.error(f"Backend error ({resp.status_code}): {resp.text}")
+                                st.stop()
 
-                except requests.exceptions.RequestException as e:
-                    st.error(f"Could not connect to backend: {e}")
-                    st.stop()
+                            data = resp.json()
+                            st.session_state["soz_result"] = data
+
+                            try:
+                                st.query_params = {"page": "soz", "soz_mode": "results"}
+                            except Exception:
+                                try:
+                                    st.experimental_set_query_params(page="soz", soz_mode="results")
+                                except Exception:
+                                    pass
+                            st.rerun()
+
+                        except requests.exceptions.RequestException as e:
+                            st.error(f"Could not connect to backend: {e}")
+                            st.stop()
 
             st.markdown('</div>', unsafe_allow_html=True)  # upload-area
             st.markdown('</div>', unsafe_allow_html=True)  # card
