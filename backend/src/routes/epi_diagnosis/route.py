@@ -6,7 +6,7 @@ import tempfile
 import mne
 from typing import Dict, Any, Optional, List
 
-from src.services.epilepsy_pipeline_service import EpilepsyPipeline, CNN_MODEL_PATH, FEATURE_LAYER_NAME
+from src.services.epilepsy_pipeline_service import EpilepsyPipeline
 
 
 epi_router = APIRouter()
@@ -33,9 +33,9 @@ async def predict_epilepsy(file: UploadFile = File(...)) -> Dict[str, Any]:
         # Load EEG with MNE
         raw = mne.io.read_raw_edf(temp_filepath, preload=True, verbose=False)
 
-        # Run full pipeline: preprocess → spectrograms → CNN features → classifier → diagnosis
+        # Run full pipeline: preprocess → stft → CNN features → classifier → diagnosis
         pipeline = EpilepsyPipeline()
-        result = pipeline.diagnose(raw_obj=raw, layer_name=FEATURE_LAYER_NAME, file_name=file.filename)
+        result = pipeline.run(raw_obj=raw)
 
         return result
 
