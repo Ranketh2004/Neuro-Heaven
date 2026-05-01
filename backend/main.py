@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pathlib import Path
 import logging
 
@@ -107,13 +108,16 @@ def startup_event():
     load_soz_and_mri_services()
 
 
-
-
 @app.on_event("shutdown")
 def shutdown_event():
     """Close database connection on shutdown."""
     MongoDatabase.disconnect()
     logger.info("Application shutdown: MongoDB connection closed")
+
+
+@app.get("/health", tags=["Health"])
+def health_check():
+    return JSONResponse({"status": "ok"})
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import time
 import numpy as np
 import plotly.graph_objects as go
 from textwrap import dedent
+from utils.api_client import API_BASE
 
 
 EPOCH_LENGTH_SECONDS = 6 
@@ -71,8 +72,7 @@ def display_binary_dashboard(predictions, window_size=EPOCH_LENGTH_SECONDS):
 # Main page
 # -----------------------------
 def render():
-    API_URL = "http://localhost:8000"
-    PREDICT_ENDPOINT = f"{API_URL}/epilepsy_diagnosis/epilepsy/predict"
+    PREDICT_ENDPOINT = f"{API_BASE}/epilepsy_diagnosis/epilepsy/predict"
     MAX_MB = 30
 
     mode_param = st.query_params.get("eeg_mode", ["upload"])

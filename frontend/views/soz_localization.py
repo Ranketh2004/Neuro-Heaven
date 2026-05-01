@@ -2,9 +2,9 @@ import streamlit as st
 import requests
 import base64
 from io import BytesIO
+from utils.api_client import API_BASE
 
-BACKEND_URL = "http://127.0.0.1:8000"
-SOZ_ENDPOINT = f"{BACKEND_URL}/epilepsy_diagnosis/soz/predict"
+SOZ_ENDPOINT = f"{API_BASE}/epilepsy_diagnosis/soz/predict"
 
 def render():
     mode_param = st.query_params.get("soz_mode", ["upload"])
