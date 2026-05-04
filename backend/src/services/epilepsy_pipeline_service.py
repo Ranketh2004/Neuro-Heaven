@@ -8,23 +8,16 @@ import numpy as np
 import pandas as pd
 import joblib
 import mne
-
+from scipy.signal import stft
 import tensorflow as tf
-from tensorflow.keras.models import Model # pyright: ignore[reportMissingModuleSource]
-from tensorflow.keras.preprocessing.image import load_img, img_to_array # pyright: ignore[reportMissingImports]
+from tensorflow.keras.models import Model
 
 from src.services.preprocessing_service import Preprocess
-from src.services.epilepsy_feature_service import process_eeg_epoch, save_spectrogram_as_image
-
-# from preprocessing_service import Preprocess
-# from epilepsy_feature_service import process_eeg_epoch, save_spectrogram_as_image
 
 _MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
 _CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "config")
-CNN_MODEL_PATH = os.path.normpath(os.path.join(_MODELS_DIR, "cnn_model_1.keras"))
-CLASSIFIER_MODEL_PATH = os.path.normpath(os.path.join(_MODELS_DIR, "best_rfc.pkl"))
-CONFIG_PATH = os.path.normpath(os.path.join(_CONFIG_DIR, "config.json"))
-FEATURE_LAYER_NAME = "dense"
+CNN_MODEL_PATH = os.path.normpath(os.path.join(_MODELS_DIR, "epilepsy_diagnosis/seizure_model.keras"))
+CLASSIFIER_MODEL_PATH = os.path.normpath(os.path.join(_MODELS_DIR, "epilepsy_diagnosis/svm_model.pkl"))
 
 logger = logging.getLogger(__name__)
 
@@ -33,126 +26,134 @@ class EpilepsyPipeline:
 
     def __init__(self):
         self.preprocessor = Preprocess()
-        self.df = pd.DataFrame()
-        self.config = json.load(open(CONFIG_PATH, "r")) if os.path.exists(CONFIG_PATH) else {}
+        self.stft_features = None
         self.predictions = []
+        self.n_channels = 8
+        self.fs = 250
+        self.nperseg = 64
+        self.noverlap = 32
+        self.feature_extractor_model = None
+        self.classifier_model = None
+        
+
+    def process_eeg_epoch(self, data):
+        """Convert EEG data to stft features."""
+
+        channel_specs = []
+        for i in range(self.n_channels):
+            f, t, Sxx = stft(
+                data[i],
+                fs=self.fs,
+                window='hann',
+                nperseg=self.nperseg,
+                noverlap=self.noverlap,
+            )
+            # Power in dB, with a small epsilon to avoid log(0)
+            pw = 10 * np.log10((np.abs(Sxx) ** 2) + 1e-10)
+            channel_specs.append(pw)
+        # Stack along a new axis so the last dimension is the channel index
+        return np.stack(channel_specs, axis=-1)
+
+    def adjust_feature_shapes(self, arr: np.ndarray, target_shape=(33, 48, 8)):
+
+        if arr.ndim == 2:
+            arr = np.expand_dims(arr, axis=-1)
+
+        h, w, c = arr.shape
+        th, tw, tc = target_shape
+
+        # TRIM
+        arr = arr[:min(h, th), :min(w, tw), :min(c, tc)]
+
+        # PAD
+        pad_h = max(0, th - arr.shape[0])
+        pad_w = max(0, tw - arr.shape[1])
+        pad_c = max(0, tc - arr.shape[2])
+
+        arr = np.pad(
+            arr,
+            ((0, pad_h), (0, pad_w), (0, pad_c)),
+            mode="constant",
+            constant_values=0
+        )
+
+        return arr
+    
+    def feature_extractor(self):
+        if self.feature_extractor_model is None:
+            self.feature_extractor_model = tf.keras.models.load_model(CNN_MODEL_PATH)
+
+        # Force graph building by running a dummy prediction. This ensures the model
+        # is fully built and ready for calls, avoiding lazy initialization
+        # issues that can arise when the model is first used.
+        _ = self.feature_extractor_model.predict(np.zeros((1, 33, 48, 8)), verbose=0)
+
+        extractor = Model(
+            inputs=self.feature_extractor_model.layers[0].input,
+            outputs=self.feature_extractor_model.layers[-3].output
+        )
+        # extract 64 features per epoch
+        features = extractor.predict(self.stft_features, verbose=0)
+        return features
+
 
     def run(self, raw_obj):
         # Preprocess EEG and create 6s epochs
+
+        stft_list = []
+
         epochs = self.preprocessor.preprocess(raw_obj)
 
-        #Create temporary folder for spectrogram images
-        spec_dir = tempfile.mkdtemp(prefix="eeg_spectrograms_")
-
-        # Step 3: Generate and save spectrograms into the folder
         for i, epoch_data in enumerate(epochs):
-            spectrogram = process_eeg_epoch(epoch_data)
-            img_path = os.path.join(spec_dir, f"epoch_{i:04d}.png")
-            save_spectrogram_as_image(spectrogram, img_path)
+            feat = self.process_eeg_epoch(epoch_data)
+            adj_feature = self.adjust_feature_shapes(feat)
+            stft_list.append(adj_feature)
 
-        return spec_dir
+        self.stft_features = np.stack(stft_list, axis=0)  # shape (n_epochs, 33, 48, 8)
+        print(f"Final stft feature shape: {self.stft_features.shape}")
+
+        features = self.feature_extractor()
+
+        if self.classifier_model is None:
+            self.classifier_model = joblib.load(CLASSIFIER_MODEL_PATH)
+        
+        predictions = self.classifier_model.predict(features)
+        print(f"Final predictions: {predictions.shape}")
+
+        seiz_epochs = int((predictions == 1).sum())
+        total_epochs = len(predictions)
+
+        return {
+            "epoch_predictions": predictions.tolist(),
+            "seizure_epochs": seiz_epochs,
+            "total_epochs": total_epochs,
+        }
+
+
+if __name__ == "__main__":
+
+    seiz_file = 'test_data/aaaaaalq_s001_t000.edf'
+    non_seiz_file = 'test_data/aaaaaaug_s004_t001.edf'
+
+    seiz_raw = mne.io.read_raw_edf(seiz_file, preload=True, verbose=False)
+    non_seiz_raw = mne.io.read_raw_edf(non_seiz_file, preload=True, verbose=False)
+
+    pipeline = EpilepsyPipeline()
+    seiz_pred = pipeline.run(non_seiz_raw)
+
+
+
+
+
+
+
+
+
+
+
     
-    def load_config(self, file_name):
-        stem = os.path.splitext(file_name)[0]
-        test_files = self.config.get("files", {})
-        if stem in test_files:
-            configs = test_files[stem].get("configs", [])
-            self.predictions = configs
-            return configs
-        return []
 
-    def extract_features(self, spec_dir, layer_name):
-        feature_extractor = self.feature_extractor(layer_name)
-        if feature_extractor is None:
-            raise ValueError(f"Layer '{layer_name}' not found in model. Check printed layer names above.")
+            
 
-        rows = []
-        image_files = sorted(f for f in os.listdir(spec_dir) if f.endswith(".png"))
-
-        for fname in image_files:
-            img_path = os.path.join(spec_dir, fname)
-            img = load_img(img_path, target_size=(224, 224))
-            img_array = img_to_array(img)
-            img_array = tf.expand_dims(img_array, axis=0)
-
-            features = feature_extractor.predict(img_array, verbose=0)
-            feature_vector = features.flatten().tolist()
-
-            rows.append({"epoch": fname, **{f"f{i}": v for i, v in enumerate(feature_vector)}})
-
-        self.df = pd.DataFrame(rows)
-        return self.df
-
-    def cleanup(self, spec_dir):
-        shutil.rmtree(spec_dir, ignore_errors=True)
-
-    def feature_extractor(self, layer_name):
-
-        feature_model = tf.keras.models.load_model(CNN_MODEL_PATH)
-
-        input_shape = tf.zeros([1, 224, 224, 3])
-        feature_model(input_shape, training=False)
-
-        try:
-            feature_extractor_layer = feature_model.get_layer(layer_name)
-            feature_extractor = Model(inputs=feature_model.inputs, outputs=feature_extractor_layer.output)
-
-            print(f"Tapped layer: {layer_name}, output shape: {feature_extractor.output_shape}")
-            return feature_extractor
-
-        except ValueError:
-            for layer in feature_model.layers:
-                print(f"Layer name: {layer.name}")
-            return None
-        
-    def final_prediction(self, features_df, file_name=None):
-        self.load_config(file_name)
-        final_model = joblib.load(CLASSIFIER_MODEL_PATH)
-        predictons = []
-        feature_columns = [col for col in features_df.columns if col.startswith("f")]
-        X = features_df[feature_columns].values
-        predictions = list(self.predictions)
-        for i, row in enumerate(X):
-            pred = final_model.predict(row.reshape(1, -1))
-            predictons.append(pred[0])
-        predictions = np.array(predictions)
-        #print(f"Predictions: {predictions}")
-        return predictions if len(predictions) > 0 else np.array(predictons)
-
-    def diagnose(self, raw_obj, layer_name, file_name=None):
-        """
-        Full end-to-end pipeline:
-          1. Preprocess EEG + generate spectrograms
-          2. Extract CNN features
-          3. Run classifier
-          4. Aggregate per-epoch predictions into a final diagnosis
-          5. Cleanup temp files
-        Returns a dict with per-epoch predictions and the final label.
-        """
-        
-        spec_dir = None
-        try:
-            # spectrograms
-            spec_dir = self.run(raw_obj)
-
-            # CNN feature extraction
-            features_df = self.extract_features(spec_dir,layer_name)
-
-            # per-epoch predictions
-            epoch_predictions = self.final_prediction(features_df, file_name)
-
-            seizure_count = int((epoch_predictions == 1).sum())
-            total_epochs = len(epoch_predictions)
-
-            print(seizure_count, total_epochs)
-
-            return {
-                "epoch_predictions": epoch_predictions.tolist(),
-                "seizure_epochs": seizure_count,
-                "total_epochs": total_epochs,
-            }
-
-        finally:
-            if spec_dir:
-                self.cleanup(spec_dir)
-
+    
+   

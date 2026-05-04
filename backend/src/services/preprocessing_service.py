@@ -4,7 +4,7 @@ import mne
 class Preprocess:
 
     def __init__(self):
-        self.channels = ['T3', 'T4', 'F3', 'F4', 'C3', 'C4', 'O1', 'O2', 'A1', 'A2']
+        self.channels = ['T3', 'T4', 'F3', 'F4', 'C3', 'C4', 'O1', 'O2']
 
     def pick_common_channels(self, raw_obj):
         mapping = {ch: ch.replace("EEG ", "").replace("-LE", "").replace(" ","").replace("-REF", "") 
@@ -18,10 +18,7 @@ class Preprocess:
             print(f'Missing channels: {missing}')   
 
         raw_obj.pick_channels(picked_channels)
-        # Reorder the 8 core channels; keep A1/A2 at the end if present (needed for referencing)
-        core_order = ['F3', 'F4', 'C3', 'C4', 'O1', 'O2', 'T3', 'T4']
-        ref_present = [ch for ch in ['A1', 'A2'] if ch in raw_obj.ch_names]
-        raw_obj.reorder_channels(core_order + ref_present)
+        raw_obj.reorder_channels(['F3', 'F4','C3','C4','O1','O2','T3','T4'])
         return raw_obj
     
     def set_montage(self, raw_obj):
@@ -45,16 +42,15 @@ class Preprocess:
         raw_obj.notch_filter(freqs=[60.0, 120.0], picks='eeg', verbose=False)
         return raw_obj
     
-    def reference(self, raw_obj, ref_channels=['A1', 'A2']):
-        available_refs = [ch for ch in ref_channels if ch in raw_obj.ch_names]
-        if available_refs:
-            raw_obj.set_eeg_reference(ref_channels=available_refs)
-            raw_obj.drop_channels(available_refs)
-        else:
-            # Fallback: average reference when A1/A2 are not in the recording
-            print(f"Reference channels {ref_channels} not found — using average reference instead.")
-            raw_obj.set_eeg_reference(ref_channels='average', verbose=False)
-        return raw_obj
+    def reference(self, raw_obj):
+
+        anode = ['F3', 'C3', 'F4', 'C4', 'T3', 'C4', 'C3', 'F3']
+        cathode = ['C3', 'O1', 'C4', 'O2', 'C3', 'T4', 'C4', 'F4']
+
+        raw_bipolar = mne.set_bipolar_reference(
+            raw_obj, anode=anode, cathode=cathode, drop_refs=True, verbose=False
+        )
+        return raw_bipolar
     
     def normalize(self, raw_obj):
 
@@ -85,8 +81,8 @@ class Preprocess:
         #raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
         raw = self.pick_common_channels(raw_obj)
         raw = self.set_montage(raw)
-        raw = self.bandpass_filter(raw)
         raw = self.notch_filter(raw)
+        raw = self.bandpass_filter(raw)
         raw = self.reference(raw)
         raw = self.normalize(raw)
         epochs = self.create_epochs(raw)
