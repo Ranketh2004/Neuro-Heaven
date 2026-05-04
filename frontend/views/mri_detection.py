@@ -4,9 +4,9 @@ import base64
 import os
 from pathlib import Path
 from textwrap import dedent
+from utils.api_client import API_BASE
 
-BACKEND_URL = "http://127.0.0.1:8000"
-MRI_ENDPOINT = f"{BACKEND_URL}/epilepsy_diagnosis/mri/predict"
+MRI_ENDPOINT = f"{API_BASE}/epilepsy_diagnosis/mri/predict"
 
 def render():
 
