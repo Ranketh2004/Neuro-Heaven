@@ -60,7 +60,7 @@ def _persist_auth_to_cookies(remember: bool):
 
     # Store both token and user in a single cookie to avoid duplicate CookieManager elements
     auth_payload = json.dumps({"token": token, "user": user})
-    cm.set("nh_auth", auth_payload, expires_at=expires)
+    cm.set("nh_auth", auth_payload, expires_at=expires, same_site="lax")
 
 
 @st.dialog(" ", width="small")
@@ -115,25 +115,26 @@ def render_dialog():
             position: relative;
         }
 
-        .auth-card div[data-testid="stButton"]:first-of-type button{
-            position:absolute !important;
-            top: 14px;
-            right: 14px;
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 10px !important;
-            border: 1px solid rgba(226,232,240,0.95) !important;
-            background: #ffffff !important;
-            box-shadow: none !important;
-            color: #94a3b8 !important;
-            font-size: 20px !important;
-            font-weight: 900 !important;
+        /* Close (✕): only tertiary button in this dialog */
+        [data-testid="stDialog"] button[kind="tertiary"]{
+            width: 44px !important;
+            min-width: 44px !important;
+            max-width: 44px !important;
+            height: 44px !important;
             padding: 0 !important;
+            border-radius: 12px !important;
+            border: 1px solid rgba(203,213,225,0.95) !important;
+            background: linear-gradient(180deg, #ffffff, #f8fafc) !important;
+            color: #64748b !important;
+            font-size: 18px !important;
+            font-weight: 700 !important;
             line-height: 1 !important;
+            box-shadow: 0 1px 2px rgba(15,23,42,0.06) !important;
         }
-        .auth-card div[data-testid="stButton"]:first-of-type button:hover{
-            background:#f8fafc !important;
-            color:#64748b !important;
+        [data-testid="stDialog"] button[kind="tertiary"]:hover{
+            background: #f1f5f9 !important;
+            border-color: #cbd5e1 !important;
+            color: #0f172a !important;
         }
 
         .auth-title{
@@ -262,22 +263,32 @@ def render_dialog():
         }
         .auth-social a:hover{ background:#f8fafc; }
 
-        button[kind="secondary"]{
-            width: 36px !important;
-            height: 36px !important;
-            border-radius: 10px !important;
-            border: 1px solid rgba(226,232,240,0.95) !important;
+        /* Footer "Sign up" / "Sign in": link-style; no border; hover matches base */
+        [data-testid="stDialog"] button[kind="secondary"]{
+            min-width: 0 !important;
+            width: auto !important;
+            max-width: 100% !important;
+            height: auto !important;
+            white-space: nowrap !important;
+            border-radius: 999px !important;
+            padding: 10px 26px !important;
+            font-weight: 700 !important;
+            font-size: 15px !important;
+            border: none !important;
+            outline: none !important;
             background: #ffffff !important;
+            color: #0284c7 !important;
             box-shadow: none !important;
-            color: #94a3b8 !important;
-            font-size: 20px !important;
-            font-weight: 900 !important;
-            padding: 0 !important;
-            line-height: 1 !important;
         }
-        button[kind="secondary"]:hover{
-            background:#f8fafc !important;
-            color:#64748b !important;
+        [data-testid="stDialog"] button[kind="secondary"]:hover,
+        [data-testid="stDialog"] button[kind="secondary"]:active,
+        [data-testid="stDialog"] button[kind="secondary"]:focus,
+        [data-testid="stDialog"] button[kind="secondary"]:focus-visible{
+            background: #ffffff !important;
+            color: #0284c7 !important;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
         }
         </style>
         """,
@@ -286,9 +297,9 @@ def render_dialog():
 
     mode = st.session_state.get("auth_mode", "signin")
 
-    spacer, btn_col = st.columns([0.92, 0.08])
+    spacer, btn_col = st.columns([0.86, 0.14])
     with btn_col:
-        if st.button("✕", key="auth_close_btn"):
+        if st.button("✕", key="auth_close_btn", type="tertiary", width=44):
             close()
             st.rerun()
 
@@ -312,12 +323,16 @@ def render_dialog():
 
                 me = get("/auth/me", token=st.session_state["token"])
                 st.session_state["user"] = me
+                st.session_state.pop("_nh_explicit_sign_out", None)
 
                 # ✅ save cookies here
                 _persist_auth_to_cookies(remember=remember)
                 st.session_state["_just_logged_in"] = True
 
-                target = st.session_state.pop("pending_page", "home")
+                target = st.session_state.pop("pending_page", "dashboard")
+                st.session_state["page"] = target
+                st.query_params["page"] = target
+                st.query_params.pop("auth", None)
                 close()
                 st.rerun()
 
@@ -342,63 +357,85 @@ def render_dialog():
             unsafe_allow_html=True,
         )
 
-        page = st.query_params.get("page", ["home"])
-        page = page[0] if isinstance(page, list) else page
-        signup_href = f'?page={page}&auth=signup'
-        st.markdown(
-            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Don't have an account? <a href=\"{signup_href}\" target=\"_self\" onclick=\"window.location.href='{signup_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign up</a></div>",
-            unsafe_allow_html=True,
-        )
+        col_a, col_b = st.columns([1.2, 1], gap=None)
+        with col_a:
+            st.markdown(
+                "<div style='margin-top:15px;text-align:right;color:#475569;font-weight:300;white-space:nowrap;padding-right:6px;'>Don't have an account?</div>",
+                unsafe_allow_html=True,
+            )
+        with col_b:
+            if st.button("Sign up", key="switch_to_signup", type="secondary", width="content"):
+                st.query_params["page"] = "home"
+                st.query_params["auth"] = "signup"
+                st.session_state["auth_mode"] = "signup"
+                st.rerun()
 
     else:
-        st.markdown('<div class="auth-title">Create an account</div>', unsafe_allow_html=True)
-        st.markdown('<div class="auth-sub">Join today and start your journey</div>', unsafe_allow_html=True)
+        # Check if just signed up successfully
+        if st.session_state.get("signup_success"):
+            st.markdown('<div class="auth-title">Account Created!</div>', unsafe_allow_html=True)
+            st.markdown('<div class="auth-sub">Your account has been created successfully.</div>', unsafe_allow_html=True)
+            st.markdown('<div style="margin-top:20px;text-align:center;color:#64748b;">You can now sign in with your credentials.</div>', unsafe_allow_html=True)
+            
+            if st.button("Continue to Sign In", type="primary", use_container_width=True):
+                st.session_state.pop("signup_success", None)
+                st.query_params["page"] = "home"
+                st.query_params["auth"] = "signin"
+                st.session_state["auth_mode"] = "signin"
+                st.rerun()
+        else:
+            st.markdown('<div class="auth-title">Create an account</div>', unsafe_allow_html=True)
+            st.markdown('<div class="auth-sub">Join today and start your journey</div>', unsafe_allow_html=True)
 
-        full_name = st.text_input("Full Name", key="su_name", placeholder="Full Name", label_visibility="collapsed")
-        email2 = st.text_input("Email", key="su_email", placeholder="name@example.com", label_visibility="collapsed")
-        pw1 = st.text_input("Password", type="password", key="su_pw1", placeholder="Password", label_visibility="collapsed")
-        agree = st.checkbox("I agree to the Terms of Service and Privacy Policy", key="su_agree")
+            full_name = st.text_input("Full Name", key="su_name", placeholder="Full Name", label_visibility="collapsed")
+            email2 = st.text_input("Email", key="su_email", placeholder="name@example.com", label_visibility="collapsed")
+            pw1 = st.text_input("Password", type="password", key="su_pw1", placeholder="Password", label_visibility="collapsed")
+            agree = st.checkbox("I agree to the Terms of Service and Privacy Policy", key="su_agree")
 
-        ok2 = st.button("Create Account", type="primary", use_container_width=True)
+            ok2 = st.button("Create Account", type="primary", use_container_width=True)
 
-        if ok2:
-            if not agree:
-                st.error("You must agree to continue.")
-            elif len(pw1) < 8:
-                st.error("Password must be at least 8 characters.")
-            else:
-                try:
-                    post("/auth/signup", {"full_name": full_name, "email": email2, "password": pw1})
-                    st.success("Account created. Now sign in.")
+            if ok2:
+                if not agree:
+                    st.error("You must agree to continue.")
+                elif len(pw1) < 8:
+                    st.error("Password must be at least 8 characters.")
+                else:
+                    try:
+                        post("/auth/signup", {"full_name": full_name, "email": email2, "password": pw1})
+                        st.session_state["signup_success"] = True
+                        st.rerun()
+                    except APIError as e:
+                        st.error(str(e))
+
+            st.markdown('<div class="auth-divider">Or continue with</div>', unsafe_allow_html=True)
+            
+            # Google OAuth button for sign up
+            google_oauth = GoogleOAuth()
+            google_auth_url = google_oauth.get_authorization_url()
+            
+            st.markdown(
+                f"""
+                <div class="auth-social">
+                    <a href="{google_auth_url}" target="_self">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" width="18" height="18">
+                        Google
+                    </a>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col_a, col_b = st.columns([1.2, 1], gap=None)
+            with col_a:
+                st.markdown(
+                    "<div style='margin-top:15px;text-align:right;color:#475569;font-weight:300;white-space:nowrap;padding-right:6px;'>Already have an account?</div>",
+                    unsafe_allow_html=True,
+                )
+            with col_b:
+                if st.button("Sign in", key="switch_to_signin", type="secondary", width="content"):
+                    st.query_params["page"] = "home"
+                    st.query_params["auth"] = "signin"
                     st.session_state["auth_mode"] = "signin"
                     st.rerun()
-                except APIError as e:
-                    st.error(str(e))
-
-        st.markdown('<div class="auth-divider">Or continue with</div>', unsafe_allow_html=True)
-        
-        # Google OAuth button for sign up
-        google_oauth = GoogleOAuth()
-        google_auth_url = google_oauth.get_authorization_url()
-        
-        st.markdown(
-            f"""
-            <div class="auth-social">
-                <a href="{google_auth_url}" target="_self">
-                    <img src="https://www.gstatic.com/images/branding/product/1x/googleg_48dp.png" width="18" height="18">
-                    Google
-                </a>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        page = st.query_params.get("page", ["home"])
-        page = page[0] if isinstance(page, list) else page
-        signin_href = f'?page={page}&auth=signin'
-        st.markdown(
-            f"<div style='margin-top:15px;text-align:center;color:#475569;font-weight:300;'>Already have an account? <a href=\"{signin_href}\" target=\"_self\" onclick=\"window.location.href='{signin_href}'; return false;\" style='margin-left:8px;color:#0284c7;font-weight:300;text-decoration:underline;'>Sign in</a></div>",
-            unsafe_allow_html=True,
-        )
 
     st.markdown("</div></div>", unsafe_allow_html=True)

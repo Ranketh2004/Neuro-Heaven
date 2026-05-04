@@ -1,6 +1,7 @@
 import base64
 import json
 from pathlib import Path
+from urllib.parse import unquote
 
 import streamlit as st
 import extra_streamlit_components as stx
@@ -47,6 +48,7 @@ def handle_google_callback():
             "/auth/me",
             token=st.session_state["token"]
         )
+        st.session_state.pop("_nh_explicit_sign_out", None)
 
         st.query_params.clear()
 
@@ -64,18 +66,31 @@ if "nh_cm_manager" not in st.session_state:
 cm = st.session_state["nh_cm_manager"]
 st.session_state["_nh_cm"] = cm  
 
-def _restore_auth_from_cookies():
-    if st.session_state.get("token"):
-        return
 
+def _nh_auth_from_st_context():
+    """Read nh_auth from the browser Cookie header (Streamlit 1.30+).
+
+    Survives full page reload; CookieManager iframe reads are often empty on
+    the first run after refresh.
+    """
     try:
-        auth_cookie = cm.get("nh_auth")
+        ctx = getattr(st, "context", None)
+        if ctx is None:
+            return None
+        cookies = getattr(ctx, "cookies", None)
+        if cookies is None:
+            return None
+        raw = cookies.get("nh_auth")
+        if raw and isinstance(raw, str):
+            raw = unquote(raw)
+        return raw
     except Exception:
-        st.stop()
+        return None
 
+
+def _apply_nh_auth_cookie_value(auth_cookie):
     if not auth_cookie:
-        return
-
+        return False
     try:
         auth = json.loads(auth_cookie) if isinstance(auth_cookie, str) else auth_cookie
         token_cookie = auth.get("token")
@@ -84,9 +99,47 @@ def _restore_auth_from_cookies():
         if token_cookie:
             st.session_state["token"] = token_cookie
             st.session_state["user"] = user_obj
-            st.rerun()
+            st.session_state.pop("_nh_auth_restore_retried", None)
+            st.session_state.pop("_nh_auth_restore_gave_up", None)
+            return True
     except Exception:
         pass
+    return False
+
+
+def _restore_auth_from_cookies():
+    """Restore JWT after a full browser reload (F5 / toolbar refresh)."""
+    if st.session_state.get("token"):
+        return
+    # Logout clears the cookie in the browser, but st.context.cookies is still the
+    # snapshot from when this Streamlit session started, so it would re-apply nh_auth
+    # on the next rerun unless we skip restore after an explicit sign-out.
+    if st.session_state.get("_nh_explicit_sign_out"):
+        return
+    if st.session_state.get("_nh_auth_restore_gave_up"):
+        return
+
+    if _apply_nh_auth_cookie_value(_nh_auth_from_st_context()):
+        return
+
+    auth_cookie = None
+    try:
+        cookies = cm.get_all(key="nh_auth_restore_get_all")
+        if not isinstance(cookies, dict):
+            cookies = {}
+        auth_cookie = cookies.get("nh_auth")
+    except Exception:
+        pass
+
+    if _apply_nh_auth_cookie_value(auth_cookie):
+        return
+
+    if not st.session_state.get("_nh_auth_restore_retried"):
+        st.session_state["_nh_auth_restore_retried"] = True
+        st.rerun()
+
+    st.session_state["_nh_auth_restore_gave_up"] = True
+
 
 _restore_auth_from_cookies()
 
@@ -99,7 +152,12 @@ def _persist_auth_to_cookie(token: str, user: dict):
         from datetime import datetime, timedelta, timezone
         expires = datetime.now(timezone.utc) + timedelta(days=7)
         auth_payload = json.dumps({"token": token, "user": user})
-        cm.set("nh_auth", auth_payload, expires_at=expires)
+        cm.set(
+            "nh_auth",
+            auth_payload,
+            expires_at=expires,
+            same_site="lax",
+        )
     except Exception:
         pass
 
@@ -130,8 +188,11 @@ def go_to(page_key: str):
 
 
 def do_logout():
+    st.session_state["_nh_explicit_sign_out"] = True
     st.session_state.pop("token", None)
     st.session_state.pop("user", None)
+    st.session_state.pop("_nh_auth_restore_retried", None)
+    st.session_state.pop("_nh_auth_restore_gave_up", None)
     try:
         cm.delete("nh_auth")
     except Exception:
@@ -160,7 +221,9 @@ if (not token) and (current_page in PROTECTED_PAGES):
     go_to("home")
 
 # Redirect authenticated users landing on the public home page to the dashboard
-if token and current_page == "home":
+# BUT: Don't redirect if auth dialog is open (user switching between sign in/sign up)
+auth_query = st.query_params.get("auth")
+if token and current_page == "home" and not auth_query:
     go_to("dashboard")
 
 logo_img_src = None
