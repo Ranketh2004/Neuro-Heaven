@@ -136,4 +136,4 @@ __pypackages__/
 .pdm.toml
 poetry.toml
 
-requirements.txt
+test_data/
