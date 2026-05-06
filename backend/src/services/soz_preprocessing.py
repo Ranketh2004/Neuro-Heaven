@@ -5,9 +5,9 @@ import numpy as np
 import mne
 
 
-# ----------------------------
-# Channel helpers (same logic as training)
-# ----------------------------
+
+# Channel helpers 
+
 NON_BRAIN_PATTERNS = [
     r"^EKG", r"^ECG", r"PHOTIC", r"^EMG", r"^RESP", r"PULSE", r"TRIG",
     r"^EOG", r"^TEMP", r"^MARK", r"^IBI"
@@ -36,9 +36,9 @@ def parse_bipolar(label: str) -> Tuple[str, Optional[str]]:
     return s, None
 
 
-# ----------------------------
-# Preprocess raw EDF (stable, training-aligned)
-# ----------------------------
+
+# Preprocess raw EDF 
+
 def preprocess_scalp(
     raw: mne.io.BaseRaw,
     notch_freqs=(60, 120),
@@ -61,9 +61,9 @@ def preprocess_scalp(
     return raw
 
 
-# ----------------------------
-# Features (9 dims per node, same as training)
-# ----------------------------
+
+# Features 
+
 BANDS = {
     "delta": (1, 4),
     "theta": (4, 8),
@@ -118,9 +118,9 @@ def node_features_from_signals(S: np.ndarray, sfreq: float, h_freq: float = 40.0
     return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-# ----------------------------
-# Edges (correlation top-k) WITH edge_attr for GATv2(edge_dim=1)
-# ----------------------------
+
+# Edges (correlation top-k) WITH edge_attr
+
 def corr_topk_edges_with_attr(S: np.ndarray, top_k: int = 8):
     """
     Returns:
@@ -154,9 +154,8 @@ def corr_topk_edges_with_attr(S: np.ndarray, top_k: int = 8):
     return edge_index, edge_attr
 
 
-# ----------------------------
-# Build node signals using TEMPLATE nodes (bipolar montage list)
-# ----------------------------
+# Build node signals using TEMPLATE nodes 
+
 def build_node_signals(raw_ref: mne.io.BaseRaw, node_labels: List[str]):
     ref_names = [norm_ref_name(c) for c in raw_ref.ch_names]
     idx_ref = {ref_names[i]: i for i in range(len(ref_names))}
