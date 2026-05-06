@@ -9,35 +9,67 @@ from utils.api_client import API_BASE
 
 EPOCH_LENGTH_SECONDS = 6 
 
-def display_binary_dashboard(predictions, window_size=EPOCH_LENGTH_SECONDS):
+def display_binary_dashboard(predictions, window_size=EPOCH_LENGTH_SECONDS, severity="normal"):
+    # severity: "normal" | "low" | "high"
+    if severity == "high":
+        card1_bg, card1_border = "linear-gradient(135deg,#FEF2F2,#FEE2E2)", "#FECACA"
+        card1_label_color, card1_value_color, card1_sub_color = "#991B1B", "#DC2626", "#7F1D1D"
+        card2_bg, card2_border = "linear-gradient(135deg,#FFF7ED,#FFEDD5)", "#FED7AA"
+        card2_label_color, card2_value_color, card2_sub_color = "#9A3412", "#EA580C", "#7C2D12"
+        chart_color = "#DC2626"
+        chart_fill = "rgba(220,38,38,0.15)"
+        event_icon = "⚡"
+        epoch_label = "Flagged Epochs"
+        duration_label = "Flagged Duration"
+    elif severity == "low":
+        card1_bg, card1_border = "linear-gradient(135deg,#FFFBEB,#FEF3C7)", "#FDE68A"
+        card1_label_color, card1_value_color, card1_sub_color = "#92400E", "#D97706", "#78350F"
+        card2_bg, card2_border = "linear-gradient(135deg,#FFFBEB,#FEF3C7)", "#FDE68A"
+        card2_label_color, card2_value_color, card2_sub_color = "#92400E", "#B45309", "#78350F"
+        chart_color = "#D97706"
+        chart_fill = "rgba(217,119,6,0.15)"
+        event_icon = "⚠️"
+        epoch_label = "Flagged Epochs"
+        duration_label = "Flagged Duration"
+    else:  # normal
+        card1_bg, card1_border = "linear-gradient(135deg,#F0FDF4,#DCFCE7)", "#BBF7D0"
+        card1_label_color, card1_value_color, card1_sub_color = "#14532D", "#16A34A", "#166534"
+        card2_bg, card2_border = "linear-gradient(135deg,#F0FDF4,#DCFCE7)", "#BBF7D0"
+        card2_label_color, card2_value_color, card2_sub_color = "#14532D", "#15803D", "#166534"
+        chart_color = "#16A34A"
+        chart_fill = "rgba(22,163,74,0.15)"
+        event_icon = "✅"
+        epoch_label = "Flagged Epochs"
+        duration_label = "Flagged Duration"
+
     st.markdown(
         '<p style="font-size:1.1rem;font-weight:700;color:#1E3A5F;margin:1.4rem 0 0.6rem 0;">'
-        'Seizure Event Summary</p>',
+        'Epoch Analysis Summary</p>',
         unsafe_allow_html=True
     )
 
     total_epochs = len(predictions)
-    seizure_epochs = sum(predictions)
-    seizure_seconds = seizure_epochs * window_size
+    flagged_epochs = sum(predictions)
+    flagged_seconds = flagged_epochs * window_size
 
     st.markdown(
         f"""
         <div style="display:flex;gap:1rem;margin-bottom:1.2rem;">
-            <div style="flex:1;background:linear-gradient(135deg,#FEF2F2,#FEE2E2);
-                        border:1px solid #FECACA;border-radius:12px;padding:1.1rem 1.3rem;">
-                <p style="margin:0 0 0.2rem 0;color:#991B1B;font-size:0.82rem;font-weight:600;
-                          text-transform:uppercase;letter-spacing:0.05em;">⚡ Seizure Events</p>
-                <p style="margin:0;font-size:2.2rem;font-weight:800;color:#DC2626;">{seizure_epochs}</p>
-                <p style="margin:0.25rem 0 0 0;color:#7F1D1D;font-size:0.78rem;">
+            <div style="flex:1;background:{card1_bg};
+                        border:1px solid {card1_border};border-radius:12px;padding:1.1rem 1.3rem;">
+                <p style="margin:0 0 0.2rem 0;color:{card1_label_color};font-size:0.82rem;font-weight:600;
+                          text-transform:uppercase;letter-spacing:0.05em;">{event_icon} {epoch_label}</p>
+                <p style="margin:0;font-size:2.2rem;font-weight:800;color:{card1_value_color};">{flagged_epochs}</p>
+                <p style="margin:0.25rem 0 0 0;color:{card1_sub_color};font-size:0.78rem;">
                     out of {total_epochs} total epochs analyzed</p>
             </div>
-            <div style="flex:1;background:linear-gradient(135deg,#EFF6FF,#DBEAFE);
-                        border:1px solid #BFDBFE;border-radius:12px;padding:1.1rem 1.3rem;">
-                <p style="margin:0 0 0.2rem 0;color:#1E3A8A;font-size:0.82rem;font-weight:600;
-                          text-transform:uppercase;letter-spacing:0.05em;">⏱ Total Seizure Duration</p>
-                <p style="margin:0;font-size:2.2rem;font-weight:800;color:#1D4ED8;">{seizure_seconds}s</p>
-                <p style="margin:0.25rem 0 0 0;color:#1E3A5F;font-size:0.78rem;">
-                    {window_size}s per epoch &times; {seizure_epochs} seizure epochs</p>
+            <div style="flex:1;background:{card2_bg};
+                        border:1px solid {card2_border};border-radius:12px;padding:1.1rem 1.3rem;">
+                <p style="margin:0 0 0.2rem 0;color:{card2_label_color};font-size:0.82rem;font-weight:600;
+                          text-transform:uppercase;letter-spacing:0.05em;">⏱ {duration_label}</p>
+                <p style="margin:0;font-size:2.2rem;font-weight:800;color:{card2_value_color};">{flagged_seconds}s</p>
+                <p style="margin:0.25rem 0 0 0;color:{card2_sub_color};font-size:0.78rem;">
+                    {window_size}s per epoch &times; {flagged_epochs} flagged epochs</p>
             </div>
         </div>
         """,
@@ -51,15 +83,16 @@ def display_binary_dashboard(predictions, window_size=EPOCH_LENGTH_SECONDS):
         x=time_axis,
         y=predictions,
         mode='lines',
-        line=dict(color='red', width=2, shape='hv'),
+        line=dict(color=chart_color, width=2, shape='hv'),
         fill='tozeroy',
+        fillcolor=chart_fill,
         name='AI Detection'
     ))
     fig.add_hrect(y0=0, y1=1, fillcolor="gray", opacity=0.05, layer="below")
 
     fig.update_layout(
         xaxis_title="Time (Seconds)",
-        yaxis=dict(tickvals=[0, 1], ticktext=["Normal", "SEIZURE"], range=[-0.2, 1.2]),
+        yaxis=dict(tickvals=[0, 1], ticktext=["Normal", "Flagged"], range=[-0.2, 1.2]),
         height=300,
         template="plotly_white",
         margin=dict(l=20, r=20, t=20, b=20)
@@ -169,20 +202,23 @@ def render():
             if seizure_epochs is not None and total_epochs is not None:
                 _pct = round(seizure_epochs / total_epochs * 100, 1) if total_epochs else 0.0
 
-                if _pct <= 2:
+                if _pct < 10:
+                    _severity = "normal"
                     _bg, _border, _accent = "#D1FAE5", "#059669", "#059669"
                     _advice = (
-                        "No seizure-like activity was identified in this recording. "
+                        "No significant seizure-like activity was identified in this recording. "
                         "If clinical suspicion remains, consider prolonged or ambulatory EEG monitoring."
                     )
-                elif _pct <= 10:
+                elif _pct < 20:
+                    _severity = "low"
                     _bg, _border, _accent = "#FEF9C3", "#CA8A04", "#92400E"
                     _advice = (
                         "A low proportion of seizure-like activity was detected. "
                         "Correlate with clinical history and semiology. "
                         "Consider repeat or prolonged EEG if findings are inconclusive."
                     )
-                elif _pct > 10:
+                else:
+                    _severity = "high"
                     _bg, _border, _accent = "#FFEDD5", "#EA580C", "#9A3412"
                     _advice = (
                         "A high proportion of seizure-like activity was detected. "
@@ -212,7 +248,7 @@ def render():
             # Temporal detection map
             st.markdown('<div style="margin-top:0.5rem;"></div>', unsafe_allow_html=True)
             if isinstance(epoch_predictions, list) and len(epoch_predictions) > 0:
-                display_binary_dashboard(epoch_predictions)
+                display_binary_dashboard(epoch_predictions, severity=_severity)
 
             # Back button
             st.markdown('<div style="margin-top:1.2rem;"></div>', unsafe_allow_html=True)
