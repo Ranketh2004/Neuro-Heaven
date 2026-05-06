@@ -823,6 +823,13 @@ def render():
                 st.warning("Age of onset cannot be greater than current age.")
                 return
 
+            # Validate: if seizure type is Focal, EEG findings must also be Focal
+            seizure_type = st.session_state.seizure_type
+            eeg_status = st.session_state.eeg_status_detail
+            if seizure_type == "Focal" and eeg_status != "Focal":
+                st.warning("When seizure type is Focal, EEG Findings (interictal status) must also be Focal.")
+                return
+
             sample_patient = {
                 "age": _clean_num(st.session_state.age),
                 "age_of_onset": _clean_num(st.session_state.age_of_onset),
