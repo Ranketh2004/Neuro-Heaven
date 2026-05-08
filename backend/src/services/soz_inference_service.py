@@ -14,10 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class SOZInferenceService:
-    """
-    EDF bytes -> preprocess -> graph -> GraphSAGE -> node probabilities
-    """
-
+    
     def __init__(self, models_dir: Path, device: str = "cpu"):
         self.models_dir = Path(models_dir)
         self.device = device
@@ -43,15 +40,19 @@ class SOZInferenceService:
         meta_path = self.models_dir / "META_graph_windows.csv"
         state_path = self.models_dir / "GraphSAGE_best_state_dict.pt"
 
-        for p in (cfg_path, scaler_path, meta_path, state_path):
+        for p in (scaler_path, meta_path, state_path):
             if not p.exists():
                 raise FileNotFoundError(f"Missing required artifact: {p}")
 
-        self.cfg = joblib.load(cfg_path) or {}
+        if cfg_path.exists():
+            self.cfg = joblib.load(cfg_path) or {}
+        else:
+            self.cfg = {}
+
         self.scaler = joblib.load(scaler_path)
         self.best_thr = float(self.cfg.get("best_thr", 0.5))
 
-        # -------- Template nodes from META --------
+        # Template nodes from META
         meta = pd.read_csv(meta_path)
 
         def parse_nodes_field(x):
@@ -85,7 +86,7 @@ class SOZInferenceService:
 
         logger.info(f"[SOZ] Template nodes loaded: n={len(self.template_nodes)}")
 
-        # -------- GraphSAGE model definition --------
+        # GraphSAGE model definition 
         class SAGENode(nn.Module):
             def __init__(self, in_dim: int, hid: int = 64, drop: float = 0.25):
                 super().__init__()
@@ -120,8 +121,7 @@ class SOZInferenceService:
     # ----------------------------------------------------------------
     # Topomap generation helpers
     # ----------------------------------------------------------------
-    # Standard 10-20 electrode positions (x, y) in head-circle coords.
-    # x: left(-) → right(+), y: posterior(-) → anterior(+)
+  
     _ELECTRODE_POS = {
         "FP1": (-0.15, 0.45), "FP2": (0.15, 0.45), "FPZ": (0.0, 0.45),
         "F7":  (-0.40, 0.25), "F3":  (-0.20, 0.25), "FZ":  (0.0, 0.25),
@@ -185,8 +185,7 @@ class SOZInferenceService:
 
         # Build an MNE Info with fake DigMontage so plot_topomap works
         info = mne.create_info(ch_names=names, sfreq=256, ch_types="eeg")
-        # Create a custom DigMontage from the 2-D positions
-        # MNE expects 3-D positions (x, y, z). Set z=0 for a flat head model.
+        
         montage = mne.channels.make_dig_montage(
             ch_pos={n: [p[0], p[1], 0.0] for n, p in zip(names, positions)},
             coord_frame="head",
@@ -215,6 +214,295 @@ class SOZInferenceService:
         buf.seek(0)
         return base64.b64encode(buf.read()).decode("ascii")
 
+    def _predict_single_window(
+        self,
+        seg,
+        filename: str,
+        window_start_sec: float,
+        window_end_sec: float,
+        top_k_return: int,
+    ) -> Dict[str, Any]:
+        import numpy as np
+        import torch
+        from torch_geometric.data import Data
+
+        from src.services.soz_preprocessing import (
+            build_node_signals,
+            node_features_from_signals,
+            corr_topk_edges_with_attr,
+        )
+
+        h_freq = float(self.cfg.get("h_freq", 40.0))
+        topk_edges = int(self.cfg.get("topk_edges", 8))
+
+        S, kept_nodes = build_node_signals(seg, self.template_nodes)
+        if S is None or len(kept_nodes) < int(self.cfg.get("min_nodes", 8)):
+            return {
+                "ok": False,
+                "error": f"Could not build enough bipolar nodes from EDF. matched={len(kept_nodes)}",
+                "matched_nodes_count": len(kept_nodes),
+                "window_start_sec": float(window_start_sec),
+                "window_end_sec": float(window_end_sec),
+            }
+
+        sfreq = float(seg.info["sfreq"])
+        X = node_features_from_signals(S, sfreq, h_freq=h_freq)
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+        Xs = self.scaler.transform(X)
+        Xs = np.nan_to_num(Xs, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+        edge_index_t, _edge_attr_t = corr_topk_edges_with_attr(S, top_k=topk_edges)
+        if hasattr(edge_index_t, "detach"):
+            edge_index = edge_index_t
+        else:
+            edge_index = torch.tensor(edge_index_t, dtype=torch.long)
+
+        data = Data(
+            x=torch.tensor(Xs, dtype=torch.float32, device=self.device),
+            edge_index=edge_index.to(self.device),
+        )
+
+        self.model.eval()
+        with torch.no_grad():
+            logits = self.model(data)
+            probs = torch.softmax(logits, dim=1)[:, 1].detach().cpu().numpy()
+
+        probs = np.nan_to_num(probs, nan=0.0, posinf=0.0, neginf=0.0)
+        order = np.argsort(probs)[::-1]
+
+        top_channels = []
+        for idx in order[: min(top_k_return, len(order))]:
+            p = float(probs[idx])
+            top_channels.append(
+                {
+                    "channel": kept_nodes[idx],
+                    "soz_probability": p,
+                    "above_threshold": bool(p >= self.best_thr),
+                }
+            )
+
+        return {
+            "ok": True,
+            "filename": filename,
+            "window_start_sec": float(window_start_sec),
+            "window_end_sec": float(window_end_sec),
+            "window_duration_sec": float(window_end_sec - window_start_sec),
+            "matched_nodes_count": len(kept_nodes),
+            "kept_nodes": kept_nodes,
+            "probs": probs,
+            "feature_shape": [int(X.shape[0]), int(X.shape[1])],
+            "top_channels": top_channels,
+        }
+
+    def _predict_full_recording(
+        self,
+        edf_bytes: bytes,
+        filename: str,
+        tmin: float = 0.0,
+        window_sec: float = 10.0,
+        stride_sec: Optional[float] = None,
+        top_k_return: int = 15,
+        debug: bool = True,
+    ) -> Dict[str, Any]:
+        import numpy as np
+        import mne
+        import tempfile
+        import os
+        import time
+
+        from src.services.soz_preprocessing import preprocess_scalp
+
+        temp_path: Optional[str] = None
+        steps = {
+            "write_temp": False,
+            "load_edf": False,
+            "preprocess": False,
+            "scan_windows": False,
+            "aggregate": False,
+            "topomap": False,
+        }
+        timings_ms: Dict[str, float] = {}
+
+        def _tick():
+            return time.perf_counter()
+
+        try:
+            t0 = _tick()
+            logger.info(
+                f"[SOZ] START full-recording predict | file={filename} | tmin={tmin} | window={window_sec}s"
+            )
+
+            s = _tick()
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".edf") as tmp:
+                tmp.write(edf_bytes)
+                temp_path = tmp.name
+            steps["write_temp"] = True
+            timings_ms["write_temp"] = (_tick() - s) * 1000.0
+
+            s = _tick()
+            raw = mne.io.read_raw_edf(temp_path, preload=False, verbose=False)
+            steps["load_edf"] = True
+            timings_ms["load_edf"] = (_tick() - s) * 1000.0
+
+            s = _tick()
+            notch = self.cfg.get("notch_freqs", [60, 120])
+            l_freq = float(self.cfg.get("l_freq", 0.5))
+            h_freq = float(self.cfg.get("h_freq", 40.0))
+            target_sfreq = int(self.cfg.get("target_sfreq", 250))
+            raw = preprocess_scalp(
+                raw,
+                notch_freqs=tuple(notch),
+                l_freq=l_freq,
+                h_freq=h_freq,
+                target_sfreq=target_sfreq,
+            )
+            steps["preprocess"] = True
+            timings_ms["preprocess"] = (_tick() - s) * 1000.0
+
+            duration = float(raw.times[-1])
+            if duration < 1.0:
+                return {"ok": False, "error": "EEG recording is too short for inference."}
+
+            window_sec = float(window_sec)
+            if window_sec <= 0:
+                window_sec = float(self.cfg.get("window_sec", 10.0))
+
+            if stride_sec is None:
+                stride_sec = float(self.cfg.get("stride_sec", max(window_sec / 2.0, 1.0)))
+            stride_sec = max(float(stride_sec), 1e-3)
+
+            scan_start = max(0.0, float(tmin))
+            last_start = max(scan_start, max(0.0, duration - window_sec))
+            starts = np.arange(scan_start, last_start + 1e-9, stride_sec)
+            if starts.size == 0:
+                starts = np.array([scan_start if scan_start < duration else max(0.0, duration - window_sec)])
+
+            s = _tick()
+            window_results = []
+            channel_scores: Dict[str, List[float]] = {}
+
+            for start in starts:
+                start = float(start)
+                end = min(duration, start + window_sec)
+                if end - start < 1.0:
+                    continue
+
+                seg = raw.copy().crop(tmin=start, tmax=end, include_tmax=False)
+                win = self._predict_single_window(
+                    seg=seg,
+                    filename=filename,
+                    window_start_sec=start,
+                    window_end_sec=end,
+                    top_k_return=top_k_return,
+                )
+                if not win.get("ok", False):
+                    continue
+
+                window_results.append(
+                    {
+                        "window_start_sec": win["window_start_sec"],
+                        "window_end_sec": win["window_end_sec"],
+                        "matched_nodes_count": win["matched_nodes_count"],
+                        "top_channels": win["top_channels"],
+                    }
+                )
+
+                for ch, p in zip(win["kept_nodes"], win["probs"]):
+                    channel_scores.setdefault(str(ch), []).append(float(p))
+
+            steps["scan_windows"] = True
+            timings_ms["scan_windows"] = (_tick() - s) * 1000.0
+
+            if len(channel_scores) == 0:
+                return {
+                    "ok": False,
+                    "error": "Could not build enough bipolar nodes from any EEG window.",
+                    "pipeline_steps": steps if debug else None,
+                    "timings_ms": {k: round(v, 2) for k, v in timings_ms.items()} if debug else None,
+                }
+
+            s = _tick()
+            aggregated = []
+            for ch, vals in channel_scores.items():
+                arr = np.asarray(vals, dtype=np.float32)
+                aggregated.append(
+                    {
+                        "channel": ch,
+                        "mean_probability": float(np.mean(arr)),
+                        "max_probability": float(np.max(arr)),
+                        "num_windows": int(len(arr)),
+                        "above_threshold": bool(float(np.max(arr)) >= self.best_thr),
+                    }
+                )
+
+            aggregated.sort(key=lambda x: (x["max_probability"], x["mean_probability"]), reverse=True)
+            top_channels = []
+            for row in aggregated[: min(top_k_return, len(aggregated))]:
+                top_channels.append(
+                    {
+                        "channel": row["channel"],
+                        "soz_probability": row["max_probability"],
+                        "mean_probability": row["mean_probability"],
+                        "num_windows": row["num_windows"],
+                        "above_threshold": row["above_threshold"],
+                    }
+                )
+
+            steps["aggregate"] = True
+            timings_ms["aggregate"] = (_tick() - s) * 1000.0
+
+            topomap_b64 = None
+            try:
+                agg_labels = [row["channel"] for row in aggregated]
+                agg_probs = np.asarray([row["max_probability"] for row in aggregated], dtype=np.float32)
+                topomap_b64 = self._generate_topomap_b64(agg_labels, agg_probs)
+                steps["topomap"] = bool(topomap_b64)
+            except Exception as topo_err:
+                logger.warning(f"[SOZ] Topomap generation failed (non-fatal): {topo_err}")
+
+            total_ms = (_tick() - t0) * 1000.0
+            resp = {
+                "ok": True,
+                "filename": filename,
+                "tmin": float(tmin),
+                "window_sec": float(window_sec),
+                "stride_sec": float(stride_sec),
+                "scan_full_recording": True,
+                "threshold": float(self.best_thr),
+                "template_nodes_count": len(self.template_nodes),
+                "windows_scanned": len(window_results),
+                "top_channels": top_channels,
+                "window_results": window_results if debug else None,
+                "topomap_png_base64": topomap_b64,
+            }
+
+            if debug:
+                resp["pipeline_steps"] = steps
+                resp["timings_ms"] = {k: round(v, 2) for k, v in timings_ms.items()}
+                resp["debug"] = {
+                    "raw_sfreq_after_preprocess": float(raw.info["sfreq"]),
+                    "scan_duration_sec": float(duration),
+                    "total_ms": float(round(total_ms, 2)),
+                }
+
+            return resp
+
+        except Exception as e:
+            logger.exception("[SOZ] Full-recording SOZ inference failed")
+            return {
+                "ok": False,
+                "error": str(e),
+                "pipeline_steps": steps if debug else None,
+                "timings_ms": {k: round(v, 2) for k, v in timings_ms.items()} if debug else None,
+            }
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+
     def predict_from_edf_bytes(
         self,
         edf_bytes: bytes,
@@ -222,8 +510,21 @@ class SOZInferenceService:
         tmin: float = 0.0,
         window_sec: float = 10.0,
         top_k_return: int = 15,
-        debug: bool = True,   # ✅ set False if you want a cleaner response
+        debug: bool = True,
+        scan_full_recording: bool = True,
+        stride_sec: Optional[float] = None,
     ) -> Dict[str, Any]:
+        if scan_full_recording:
+            return self._predict_full_recording(
+                edf_bytes=edf_bytes,
+                filename=filename,
+                tmin=tmin,
+                window_sec=window_sec,
+                stride_sec=stride_sec,
+                top_k_return=top_k_return,
+                debug=debug,
+            )
+
         import numpy as np
         import mne
         import torch
@@ -340,9 +641,7 @@ class SOZInferenceService:
             topk_edges = int(self.cfg.get("topk_edges", 8))
             edge_index_t, _edge_attr_t = corr_topk_edges_with_attr(S, top_k=topk_edges)
 
-            # IMPORTANT: corr_topk_edges_with_attr already returns torch tensors in your training code style,
-            # but your backend version might return numpy arrays.
-            # So handle both:
+           
             if hasattr(edge_index_t, "detach"):
                 edge_index = edge_index_t
             else:
